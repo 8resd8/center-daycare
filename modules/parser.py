@@ -73,18 +73,68 @@ class CareRecordParser:
 
         return best
 
-    # ... (기존 __init__ 및 헬퍼 메서드는 동일) ...
-
     def parse(self):
+        final_records = []
+
         with pdfplumber.open(self.pdf_file) as pdf:
             pages = pdf.pages
-            self._personal_info = self._parse_personal_info(pages)
-            self._basic_info = self._parse_basic_info_block(pages)
-            for page in pages:
-                self._parse_page(page)
+            page_groups = self._split_page_groups(pages)
 
-        self._merge_appendix_to_main()
+            for group_pages in page_groups:
+                if not group_pages:
+                    continue
+
+                # 그룹 단위로 상태 초기화
+                self.parsed_data = []
+                self.appendix_notes = {}
+
+                self._personal_info = self._parse_personal_info(group_pages)
+                self._basic_info = self._parse_basic_info_block(group_pages)
+
+                for page in group_pages:
+                    self._parse_page(page)
+
+                self._merge_appendix_to_main()
+                final_records.extend(self.parsed_data)
+
+        self.parsed_data = final_records
         return self.parsed_data
+
+    def _split_page_groups(self, pages):
+        """한 PDF 안에 여러 수급자 기록지가 연속으로 존재하는 경우 그룹을 분리"""
+        if not pages:
+            return []
+
+        groups = []
+        current_group = []
+
+        for page in pages:
+            try:
+                text = page.extract_text() or ""
+            except Exception:
+                text = ""
+
+            normalized = text.replace(" ", "")
+            is_header = (
+                "장기요양급여제공기록지" in normalized
+                or "노인장기요양보험법시행규칙" in normalized
+            )
+
+            if is_header:
+                if current_group:
+                    groups.append(current_group)
+                current_group = [page]
+            else:
+                if current_group:
+                    current_group.append(page)
+                elif text.strip():
+                    current_group = [page]
+
+        if current_group:
+            groups.append(current_group)
+
+        # 헤더를 찾지 못한 경우 전체 페이지를 하나의 그룹으로 반환
+        return groups or [list(pages)]
 
     def _parse_page(self, page):
         # 1. 페이지 내의 섹션 헤더 위치 찾기 (별지 구분용)
