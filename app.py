@@ -13,6 +13,20 @@ st.markdown(
     """
     <style>
       [data-testid="stSidebarNav"] { display: none; }
+      section[data-testid="stSidebar"] div[id^="person_btn_"] button {
+        background: transparent !important;
+        border: none !important;
+        color: inherit !important;
+        text-align: left;
+        padding-left: 0 !important;
+      }
+      section[data-testid="stSidebar"] div[id^="person_btn_"] button[kind="primary"] {
+        color: #1f6feb !important;
+        font-weight: 600;
+      }
+      section[data-testid="stSidebar"] div[id^="person_btn_"] button[kind="secondary"]:hover {
+        color: #1f6feb !important;
+      }
     </style>
     """,
     unsafe_allow_html=True,
@@ -204,6 +218,16 @@ with st.sidebar:
         else:
             st.write("-")
 
+        if active_doc and active_doc.get("parsed_data"):
+            if st.button("💾 파싱된 인원 전체 DB 저장", use_container_width=True, type="primary"):
+                with st.spinner("DB 저장 중..."):
+                    count = save_parsed_data(active_doc["parsed_data"])
+                    if count > 0:
+                        st.success(f"✅ {count}건의 기록이 저장되었습니다.")
+                        st.rerun()
+                    else:
+                        st.error("저장에 실패했습니다. 로그를 확인해주세요.")
+
         st.subheader("👥 파싱된 인원")
         person_entries = _iter_person_entries()
         if not person_entries:
@@ -232,17 +256,6 @@ with st.sidebar:
                         key=f"done_{entry['key']}"
                     )
                     _set_person_done(entry["key"], done_value)
-
-            st.divider()
-            if active_doc and active_doc.get("parsed_data"):
-                if st.button("💾 파싱된 인원 전체 DB 저장", use_container_width=True, type="primary"):
-                    with st.spinner("DB 저장 중..."):
-                        count = save_parsed_data(active_doc["parsed_data"])
-                        if count > 0:
-                            st.success(f"✅ {count}건의 기록이 저장되었습니다.")
-                            st.rerun()
-                        else:
-                            st.error("저장에 실패했습니다. 로그를 확인해주세요.")
     else:
         st.info("좌측 상단에서 PDF 파일을 업로드해주세요.")
 
@@ -330,17 +343,6 @@ with main_tab1:
                 "작성자": r.get('writer_func')
             } for r in data])
             st.dataframe(df_func, use_container_width=True, hide_index=True)
-
-        st.divider()
-
-        if st.button("💾 데이터베이스에 저장하기", type="primary", use_container_width=True):
-            with st.spinner("DB 저장 중..."):
-                count = save_parsed_data(data)
-                if count > 0:
-                    st.success(f"✅ {count}건의 기록이 안전하게 저장되었습니다!")
-                    st.rerun()
-                else:
-                    st.error("저장에 실패했습니다. 로그를 확인해주세요.")
 
 # =========================================================
 # [탭 2] AI 품질 평가
