@@ -17,6 +17,7 @@ class CareRecordParser:
         self.appendix_notes = {}
         self._debug = os.getenv("PARSER_DEBUG") == "1"
         self._basic_info = {}
+        self._personal_info = {}
 
     def _normalize_text(self, text):
         s = str(text).replace("\n", "").replace(" ", "")
@@ -75,6 +76,7 @@ class CareRecordParser:
     def parse(self):
         with pdfplumber.open(self.pdf_file) as pdf:
             pages = pdf.pages
+            self._personal_info = self._parse_personal_info(pages)
             self._basic_info = self._parse_basic_info_block(pages)
             for page in pages:
                 self._parse_page(page)
@@ -129,9 +131,16 @@ class CareRecordParser:
             current_date = self._clean_date(raw_date)
             if not current_date: continue
 
+            customer_name = self._personal_info.get("customer_name") or self._extract_customer_name(table)
+
             record = {
                 "date": current_date,
-                "customer_name": self._extract_customer_name(table),
+                "customer_name": customer_name,
+                "customer_birth_date": self._personal_info.get("birth_date"),
+                "customer_grade": self._personal_info.get("care_grade"),
+                "customer_recognition_no": self._personal_info.get("recognition_no"),
+                "facility_name": self._personal_info.get("facility_name"),
+                "facility_code": self._personal_info.get("facility_code"),
                 "start_time": basic_info.get("start_time"),
                 "end_time": basic_info.get("end_time"),
                 "total_service_time": basic_info.get("total_service_time"),
@@ -368,6 +377,37 @@ class CareRecordParser:
         if len(writer_rows) >= 3: idx["writer_nur"] = writer_rows[2]
         if len(writer_rows) >= 4: idx["writer_func"] = writer_rows[3]
         return idx
+
+    def _parse_personal_info(self, pages):
+        if not pages:
+            return {}
+        try:
+            raw_text = pages[0].extract_text() or ""
+        except Exception:
+            return {}
+
+        text = re.sub(r"\s+", " ", raw_text)
+        info = {}
+
+        def _extract(pattern):
+            match = re.search(pattern, text)
+            return match.group(1).strip() if match else ""
+
+        info["customer_name"] = _extract(r"수급자명\s+([^\s]+)")
+
+        birth = _extract(r"생년월일\s+(\d{4}\.\d{2}\.\d{2})")
+        if birth:
+            info["birth_date"] = birth.replace(".", "-")
+
+        info["care_grade"] = _extract(r"장기요양등급\s+([^\s]+)")
+        info["recognition_no"] = _extract(r"장기요양인정번호\s+([A-Z0-9]+)")
+
+        facility = _extract(r"장기요양기관명\s+(.+?)\s+장기요양기관기호")
+        if facility:
+            info["facility_name"] = facility
+        info["facility_code"] = _extract(r"장기요양기관기호\s+([0-9A-Za-z]+)")
+
+        return info
 
     def _parse_basic_info_block(self, pages):
         anchor = "신체활동지원"
