@@ -220,9 +220,20 @@ with main_tab1:
 
         st.markdown(f"### 👤 대상자: **{customer_name}** 어르신")
 
-        sub_tab1, sub_tab2, sub_tab3, sub_tab4 = st.tabs([
-            "💪 신체활동지원", "🧠 인지관리", "🩺 간호관리", "🏃 기능회복"
+        sub_tab_basic, sub_tab1, sub_tab2, sub_tab3, sub_tab4 = st.tabs([
+            "ℹ️ 기본 정보", "💪 신체활동지원", "🧠 인지관리", "🩺 간호관리", "🏃 기능회복"
         ])
+
+        with sub_tab_basic:
+            df_basic = pd.DataFrame([{
+                "날짜": r.get('date'),
+                "총시간": r.get('total_service_time', "-"),
+                "시작시간": r.get('start_time') or "-",
+                "종료시간": r.get('end_time') or "-",
+                "이동서비스": r.get('transport_service', "미제공"),
+                "차량번호": r.get('transport_vehicles', "")
+            } for r in data])
+            st.dataframe(df_basic, use_container_width=True, hide_index=True)
 
         with sub_tab1:
             df_phy = pd.DataFrame([{

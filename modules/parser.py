@@ -8,6 +8,7 @@ class CareRecordParser:
         self.parsed_data = []
         self.appendix_notes = {}
         self._debug = os.getenv("PARSER_DEBUG") == "1"
+        self._basic_info = {}
 
     def _normalize_text(self, text):
         s = str(text).replace("\n", "").replace(" ", "")
@@ -65,7 +66,9 @@ class CareRecordParser:
 
     def parse(self):
         with pdfplumber.open(self.pdf_file) as pdf:
-            for page in pdf.pages:
+            pages = pdf.pages
+            self._basic_info = self._parse_basic_info_block(pages)
+            for page in pages:
                 self._parse_page(page)
 
         self._merge_appendix_to_main()
@@ -80,6 +83,8 @@ class CareRecordParser:
         })
 
         if not table: return
+
+        basic_info = self._basic_info or {}
 
         if self._debug:
             try:
@@ -119,7 +124,11 @@ class CareRecordParser:
             record = {
                 "date": current_date,
                 "customer_name": self._extract_customer_name(table),
-                "start_time": None, "end_time": None,
+                "start_time": basic_info.get("start_time"),
+                "end_time": basic_info.get("end_time"),
+                "total_service_time": basic_info.get("total_service_time"),
+                "transport_service": basic_info.get("transport_service", "미제공"),
+                "transport_vehicles": basic_info.get("transport_vehicles", ""),
 
                 # 1. 신체활동지원
                 "hygiene_care": "미실시",
@@ -150,6 +159,15 @@ class CareRecordParser:
             }
 
             # --- 데이터 매핑 ---
+            if idx["total_time"] != -1:
+                total_val = self._get_cell(table, idx["total_time"], col_idx)
+                if total_val:
+                    normalized_total = total_val.replace(" ", "")
+                    record["total_service_time"] = normalized_total
+                    if normalized_total in ("미이용", "결석"):
+                        record["start_time"] = None
+                        record["end_time"] = None
+
             if idx["time"] != -1:
                 val = self._get_cell(table, idx["time"], col_idx)
                 if val and "~" in val:
@@ -259,7 +277,7 @@ class CareRecordParser:
 
     def _find_row_indices(self, table):
         idx = {
-            "date": -1, "time": -1,
+            "date": -1, "time": -1, "total_time": -1,
             "hygiene": -1, "bath_time": -1, "bath_method": -1,
             "meal_bk": -1, "meal_ln": -1, "meal_dn": -1,
             "excretion": -1, "mobility": -1,
@@ -276,6 +294,7 @@ class CareRecordParser:
 
             if "년월/일" in label: idx["date"] = i
             elif "시작시간" in label: idx["time"] = i
+            elif "총시간" in label: idx["total_time"] = i
 
             # 신체
             elif "세면" in label: idx["hygiene"] = i
@@ -328,6 +347,72 @@ class CareRecordParser:
         if len(writer_rows) >= 3: idx["writer_nur"] = writer_rows[2]
         if len(writer_rows) >= 4: idx["writer_func"] = writer_rows[3]
         return idx
+
+    def _parse_basic_info_block(self, pages):
+        anchor = "신체활동지원"
+        block = ""
+
+        for page in pages:
+            try:
+                text = page.extract_text() or ""
+            except Exception:
+                text = ""
+
+            if not text:
+                continue
+
+            if anchor in text:
+                block += text.split(anchor)[0]
+                break
+            else:
+                block += text + "\n"
+
+        if not block:
+            return {}
+
+        info = {}
+
+        total_match = re.search(r"총\s*시간[:\s]*([0-9]{1,4}\s*분|미이용|결석)", block)
+        if total_match:
+            info["total_service_time"] = total_match.group(1).replace(" ", "")
+
+        time_match = re.search(
+            r"시작\s*시간\s*~\s*종료\s*시간[:\s]*([0-9]{1,2}:[0-9]{2})\s*[~\-]\s*([0-9]{1,2}:[0-9]{2})",
+            block
+        )
+        if not time_match:
+            time_match = re.search(
+                r"시작\s*시간[:\s]*([0-9]{1,2}:[0-9]{2}).*?종료\s*시간[:\s]*([0-9]{1,2}:[0-9]{2})",
+                block,
+                re.S
+            )
+        if time_match:
+            info["start_time"] = time_match.group(1)
+            info["end_time"] = time_match.group(2)
+
+        transport_match = re.search(
+            r"이동\s*서비스\s*제공\s*여부[^\n]*?(?:[:：]\s*|)([^\n]*)",
+            block
+        )
+        raw_transport = (transport_match.group(1).strip() if transport_match and transport_match.group(1) else "")
+
+        vehicle_match = re.search(r"\(차량번호\)\s*([^\n]+)", block)
+        vehicle_line = vehicle_match.group(1) if vehicle_match else ""
+        cleaned_vehicle_line = re.sub(r"[^\d가-힣, ]", " ", vehicle_line)
+        plates = re.findall(r"\d{2,3}[가-힣]\d{4}", cleaned_vehicle_line)
+
+        if plates:
+            unique = list(dict.fromkeys(plates))
+            info["transport_vehicles"] = ", ".join(unique)
+            info["transport_service"] = "제공"
+        elif raw_transport:
+            normalized = re.sub(r"[^\w가-힣]", "", raw_transport)
+            if "■" in raw_transport or ("제공" in normalized and "미제공" not in normalized):
+                info["transport_service"] = "제공"
+            elif "미제공" in normalized or "□" in raw_transport:
+                info["transport_service"] = "미제공"
+
+        return info
 
     def _get_cell(self, table, row, col):
         try: return str(table[row][col]).replace("\n", " ").strip() if table[row][col] else ""
