@@ -305,7 +305,7 @@ with main_tab1:
                 "세면/구강": r.get('hygiene_care'),
                 "목욕": r.get('bath_time') if r.get('bath_time') == "없음" else f"{r.get('bath_time')} / {r.get('bath_method')}",
                 "식사": f"{r.get('meal_breakfast')}/{r.get('meal_lunch')}/{r.get('meal_dinner')}",
-                "화장실이용하기(기저기교환)": r.get('toilet_care'),
+                "화장실이용하기(기저귀교환)": r.get('toilet_care'),
                 "이동": r.get('mobility_care'),
                 "작성자": r.get('writer_phy')
             } for r in data])
