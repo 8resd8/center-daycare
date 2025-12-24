@@ -390,29 +390,15 @@ with main_tab1:
                     label="식사량 (출석당 평균)",
                     value=_format_ratio(meal_header.get("curr")),
                     delta=meal_header.get("change_label", "데이터 부족"),
+                    delta_color="normal",
                 )
                 toilet_header = header.get("toilet", {})
                 header_cols[1].metric(
                     label="배설 (출석당 평균)",
                     value=_format_ratio(toilet_header.get("curr")),
                     delta=toilet_header.get("change_label", "데이터 부족"),
+                    delta_color="inverse",
                 )
-
-                st.markdown("#### 📝 특이사항 비교")
-                note_cols = st.columns(2)
-                note_cols[0].markdown("**지난주**")
-                if header.get("notes", {}).get("last"):
-                    note_cols[0].write("\n\n".join(header["notes"]["last"]))
-                else:
-                    note_cols[0].info("내용 없음")
-
-                note_cols[1].markdown("**이번주**")
-                if header.get("notes", {}).get("this"):
-                    note_cols[1].markdown(
-                        "<br/>".join(header["notes"]["this"]), unsafe_allow_html=True
-                    )
-                else:
-                    note_cols[1].info("내용 없음")
         else:
             st.info("주간 비교를 위한 날짜 정보가 부족합니다.")
 
