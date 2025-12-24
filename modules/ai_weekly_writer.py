@@ -21,12 +21,11 @@ def generate_weekly_report(customer_name, date_range, analysis_payload):
     try:
         client = _get_openai_client()
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4.1-mini",
             messages=[
                 {"role": "system", "content": WEEKLY_WRITER_SYSTEM_PROMPT},
                 {"role": "user", "content": input_content},
             ],
-            temperature=0.7,
         )
         content = response.choices[0].message.content
         if not content:
