@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import time
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from modules.parser import CareRecordParser
 from modules.parsing_database import save_parsed_data
@@ -350,7 +350,7 @@ with main_tab1:
         st.markdown("#### 📈 주간 상태 변화")
         week_dates = sorted([r.get("date") for r in data if r.get("date")])
         if week_dates:
-            week_start = week_dates[0]
+            week_start = week_dates[-1]
             result = compute_weekly_status(customer_name, week_start)
             if result.get("error"):
                 st.error(f"주간 분석 실패: {result['error']}")

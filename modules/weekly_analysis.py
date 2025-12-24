@@ -86,11 +86,12 @@ def _fetch_two_week_records(
 def compute_weekly_status(customer_name: str, week_start_str: str) -> Dict:
     try:
         week_start = datetime.strptime(week_start_str, "%Y-%m-%d").date()
+        aligned_start = week_start - timedelta(days=week_start.weekday())
     except Exception:
         return {"error": "날짜 형식이 올바르지 않습니다."}
 
     try:
-        rows, prev_range, curr_range = _fetch_two_week_records(customer_name, week_start)
+        rows, prev_range, curr_range = _fetch_two_week_records(customer_name, aligned_start)
     except Exception as e:
         return {"error": str(e)}
 
