@@ -1,6 +1,90 @@
 import mysql.connector
 import streamlit as st
 
+def save_weekly_status(*, customer_id: int, start_date, end_date, report_text: str) -> None:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO weekly_status (customer_id, start_date, end_date, report_text)
+            VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                report_text=VALUES(report_text),
+                updated_at=CURRENT_TIMESTAMP
+            """,
+            (customer_id, start_date, end_date, report_text),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def load_weekly_status(*, customer_id: int, start_date, end_date) -> str | None:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            SELECT report_text
+            FROM weekly_status
+            WHERE customer_id=%s AND start_date=%s AND end_date=%s
+            """,
+            (customer_id, start_date, end_date),
+        )
+        row = cursor.fetchone()
+        return row[0] if row else None
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def resolve_customer_id(*, name: str, recognition_no: str | None = None, birth_date=None) -> int | None:
+    """Resolve customer_id for weekly_status storage.
+
+    Priority:
+    1) recognition_no (unique-ish)
+    2) name + birth_date
+    3) name (fallback, newest)
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        if recognition_no:
+            cursor.execute(
+                "SELECT customer_id FROM customers WHERE recognition_no=%s ORDER BY customer_id DESC LIMIT 1",
+                (recognition_no,),
+            )
+            row = cursor.fetchone()
+            if row:
+                return int(row[0])
+
+        if name and birth_date:
+            cursor.execute(
+                "SELECT customer_id FROM customers WHERE name=%s AND birth_date=%s ORDER BY customer_id DESC LIMIT 1",
+                (name, birth_date),
+            )
+            row = cursor.fetchone()
+            if row:
+                return int(row[0])
+
+        if name:
+            cursor.execute(
+                "SELECT customer_id FROM customers WHERE name=%s ORDER BY customer_id DESC LIMIT 1",
+                (name,),
+            )
+            row = cursor.fetchone()
+            if row:
+                return int(row[0])
+        return None
+    finally:
+        cursor.close()
+        conn.close()
+
 
 def get_db_connection():
     return mysql.connector.connect(**st.secrets["mysql"])
