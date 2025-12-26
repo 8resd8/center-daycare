@@ -7,7 +7,7 @@ import json
 import streamlit.components.v1 as components
 
 from modules.pdf_parser import CareRecordParser
-from modules.database import save_parsed_data
+from modules.database import save_parsed_data, save_weekly_status, load_weekly_status, resolve_customer_id
 from modules.ai_daily_validator import AIEvaluator
 from modules.weekly_data_analyzer import compute_weekly_status
 from modules.ai_weekly_writer import generate_weekly_report
@@ -450,9 +450,41 @@ with main_tab1:
                     progress_bar = ai_col.empty()
                     status_line = ai_col.empty()
                     response_area = result_col.container()
-                    report_state_key = f"weekly_ai_report::{customer_name}::{prev_range[0]}::{curr_range[1]}"
+
+                    customer_id = None
+                    try:
+                        customer_id = resolve_customer_id(
+                            name=customer_name,
+                            recognition_no=(data[0].get("customer_recognition_no") if data else None),
+                            birth_date=(data[0].get("customer_birth_date") if data else None),
+                        )
+                    except Exception:
+                        customer_id = None
+
+                    person_key = st.session_state.get("active_person_key")
+                    report_identity = str(customer_id) if customer_id is not None else (person_key or customer_name)
+                    report_state_key = f"weekly_ai_report::{report_identity}::{prev_range[0]}::{curr_range[1]}"
+
+                    if report_state_key not in st.session_state:
+                        saved_report = None
+                        if customer_id is not None:
+                            try:
+                                saved_report = load_weekly_status(
+                                    customer_id=customer_id,
+                                    start_date=prev_range[0],
+                                    end_date=curr_range[1],
+                                )
+                            except Exception:
+                                saved_report = None
+                        if saved_report:
+                            st.session_state[report_state_key] = saved_report
+
                     if st.session_state.get(report_state_key):
-                        _render_copyable_report(response_area, st.session_state.get(report_state_key, ""), report_state_key)
+                        _render_copyable_report(
+                            response_area,
+                            st.session_state.get(report_state_key, ""),
+                            report_state_key,
+                        )
                     if ai_col.button("생성하기"):
                         progress_bar.progress(0)
                         status_line.text("요청 중... 0%")
@@ -471,6 +503,16 @@ with main_tab1:
                             else:
                                 text_report = report if isinstance(report, str) else str(report)
                                 st.session_state[report_state_key] = text_report
+                                if customer_id is not None:
+                                    try:
+                                        save_weekly_status(
+                                            customer_id=customer_id,
+                                            start_date=prev_range[0],
+                                            end_date=curr_range[1],
+                                            report_text=text_report,
+                                        )
+                                    except Exception:
+                                        pass
                                 _render_copyable_report(response_area, text_report, report_state_key)
                             progress_bar.progress(100)
                             status_line.text("완료: 100%")

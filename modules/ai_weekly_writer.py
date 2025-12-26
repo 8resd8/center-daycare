@@ -3,8 +3,6 @@ from __future__ import annotations
 import openai
 import streamlit as st
 
-import math
-
 from prompts import WEEKLY_WRITER_SYSTEM_PROMPT, WEEKLY_WRITER_USER_TEMPLATE
 
 
@@ -44,15 +42,6 @@ def _format_input_data(name, date_range, payload) -> str:
         text = str(value).strip() if value else ""
         return text or "없음"
 
-    def _sum_values(values):
-        total = 0.0
-        for val in _safe_dict(values).values():
-            try:
-                total += float(val or 0)
-            except (TypeError, ValueError):
-                continue
-        return total
-
     def _to_float(value):
         if value in (None, "", "-", "없음"):
             return None
@@ -68,112 +57,102 @@ def _format_input_data(name, date_range, payload) -> str:
         except ValueError:
             return None
 
-    def _format_number(value, suffix=""):
-        number = _to_float(value)
-        if number is None:
-            return "-"
-        formatted = f"{int(number)}" if number.is_integer() else f"{number:.1f}"
-        return f"{formatted}{suffix}" if suffix else formatted
+    def _trend_label(delta_value: object) -> str:
+        value = _to_float(delta_value)
+        if value is None:
+            return "데이터 부족"
+        if value > 0:
+            return "증가"
+        if value < 0:
+            return "감소"
+        return "유지"
 
-    def _format_breakdown(values, suffix):
-        data = _safe_dict(values)
-        if not data:
-            return "-"
-        order = ["일반식", "죽식", "다진식"]
-        ordered_keys = [key for key in order if key in data] + [
-            key for key in data
-            if key not in order
-        ]
-        return " / ".join(f"{key} {_format_number(data.get(key), suffix)}" for key in ordered_keys)
+    def _pick_line(text: str, index: int) -> str:
+        lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+        if not lines:
+            return "없음"
+        if 0 <= index < len(lines):
+            return lines[index]
+        return lines[-1]
+
+    def _compose_oer(text: str, fallback: str) -> tuple[str, str, str]:
+        if not text or str(text).strip() in ("", "없음", "-"):
+            return fallback, "없음", "없음"
+        clean = str(text).strip()
+        return _pick_line(clean, 0), _pick_line(clean, 1), _pick_line(clean, 2)
+
+    def _notes_trend(prev_text: str, curr_text: str) -> str:
+        prev_clean = (prev_text or "").strip()
+        curr_clean = (curr_text or "").strip()
+        if not prev_clean and not curr_clean:
+            return "변화 없음"
+        if prev_clean == curr_clean:
+            return "유지"
+        return "유지"
+
+    def _build_physical_change_observation(trend_meal: str, trend_toilet: str) -> str:
+        for label, trend in (("식사", trend_meal), ("배설", trend_toilet)):
+            if trend in ("증가", "감소"):
+                return f"저번주에 비해 이번주 {label} 상태가 {trend}하였음"
+        if trend_meal == "유지" and trend_toilet == "유지":
+            return "저번주에 비해 이번주 신체 상태가 전반적으로 유지되었음"
+        return "저번주에 비해 이번주 신체 상태의 변화 여부를 관찰하였음"
 
     payload = _safe_dict(payload)
     prev_week = _safe_dict(payload.get("previous_week"))
     curr_week = _safe_dict(payload.get("current_week"))
     changes = _safe_dict(payload.get("changes"))
-    per_attendance = _safe_dict(payload.get("per_attendance"))
 
-    prev_meals = _safe_dict(prev_week.get("meals"))
-    curr_meals = _safe_dict(curr_week.get("meals"))
-    prev_toilet = _safe_dict(prev_week.get("toilet"))
-    curr_toilet = _safe_dict(curr_week.get("toilet"))
-    toilet_delta = _safe_dict(changes.get("toilet_breakdown"))
+    physical_prev = _safe_text(prev_week.get("physical"))
+    cognitive_prev = _safe_text(prev_week.get("cognitive"))
+    nursing_prev = _safe_text(prev_week.get("nursing"))
+    functional_prev = _safe_text(prev_week.get("functional"))
 
-    meal_total_prev = _format_number(_sum_values(prev_meals), "회분")
-    meal_total_curr = _format_number(_sum_values(curr_meals), "회분")
-    toilet_total_prev = _format_number(_sum_values(prev_toilet), "회")
-    toilet_total_curr = _format_number(_sum_values(curr_toilet), "회")
-    meal_change = _format_number(changes.get("meal"), "회분")
-    toilet_change = _format_number(changes.get("toilet"), "회")
+    physical_curr = _safe_text(curr_week.get("physical"))
+    cognitive_curr = _safe_text(curr_week.get("cognitive"))
+    nursing_curr = _safe_text(curr_week.get("nursing"))
+    functional_curr = _safe_text(curr_week.get("functional"))
 
-    if toilet_delta:
-        toilet_delta_summary = " / ".join(
-            f"{label} {_format_number(toilet_delta.get(label), '회')}"
-            for label in ("소변", "대변", "기저귀교환")
-        )
-    else:
-        toilet_delta_summary = "-"
+    meal_trend = _trend_label(changes.get("meal"))
+    toilet_trend = _trend_label(changes.get("toilet"))
+    physical_trend = meal_trend if meal_trend != "유지" else toilet_trend
+    cognitive_trend = _notes_trend(cognitive_prev, cognitive_curr)
+    behavior_trend = _notes_trend(functional_prev, functional_curr)
 
-    meal_breakdown_curr = _format_breakdown(curr_meals, "회분")
+    physical_observation, physical_evidence, _ = _compose_oer(
+        physical_curr,
+        _build_physical_change_observation(meal_trend, toilet_trend),
+    )
+    physical_bridge = _pick_line(physical_prev, 0)
+    physical_intervention = _pick_line(nursing_curr, 0)
 
-    meal_avg_prev = _format_number(per_attendance.get("meal_avg_prev"), "회분")
-    meal_avg_curr = _format_number(per_attendance.get("meal_avg_curr"), "회분")
-    meal_avg_change_label = per_attendance.get("meal_avg_change_label") or "데이터 부족"
-    toilet_avg_prev = _format_number(per_attendance.get("toilet_avg_prev"), "회")
-    toilet_avg_curr = _format_number(per_attendance.get("toilet_avg_curr"), "회")
-    toilet_avg_change_label = per_attendance.get("toilet_avg_change_label") or "데이터 부족"
+    cognitive_observation, cognitive_evidence, _ = _compose_oer(
+        cognitive_curr,
+        "지난주 대비 인지·심리 상태의 변화 여부를 관찰하였음",
+    )
+    cognitive_intervention = _pick_line(nursing_curr, 1)
 
-    def _is_significant_percent(value: object, threshold: float) -> bool:
-        num = _to_float(value)
-        if num is None or not math.isfinite(num):
-            return False
-        return abs(num) >= threshold
-
-    meal_avg_percent = per_attendance.get("meal_avg_percent")
-    toilet_avg_percent = per_attendance.get("toilet_avg_percent")
-
-    show_meal_avg = _is_significant_percent(meal_avg_percent, 10.0)
-    show_toilet_avg = _is_significant_percent(toilet_avg_percent, 10.0)
-
-    reference_metrics_block = ""
-    if show_meal_avg or show_toilet_avg:
-        lines = ["# [참고 지표(판단용/출력 금지)]"]
-        if show_meal_avg:
-            lines.append(
-                f"- 식사량(출석일수 보정 평균): {meal_avg_prev} → {meal_avg_curr} ({meal_avg_change_label})"
-            )
-        if show_toilet_avg:
-            lines.append(
-                f"- 배설(출석일수 보정 평균): {toilet_avg_prev} → {toilet_avg_curr} ({toilet_avg_change_label})"
-            )
-        reference_metrics_block = "\n".join(lines)
+    behavior_observation, behavior_evidence, _ = _compose_oer(
+        functional_curr,
+        "지난주 대비 행동·안전 상태의 변화 여부를 관찰하였음",
+    )
+    behavior_intervention = _pick_line(nursing_curr, 2)
 
     return WEEKLY_WRITER_USER_TEMPLATE.format(
         name=name,
         start_date=date_range[0].strftime("%Y-%m-%d"),
         end_date=date_range[1].strftime("%Y-%m-%d"),
-        attendance_prev=prev_week.get("attendance", 0),
-        attendance_curr=curr_week.get("attendance", 0),
-        meal_total_prev=meal_total_prev,
-        meal_total_curr=meal_total_curr,
-        meal_change=meal_change,
-        meal_avg_prev=meal_avg_prev,
-        meal_avg_curr=meal_avg_curr,
-        meal_avg_change_label=meal_avg_change_label,
-        toilet_total_prev=toilet_total_prev,
-        toilet_total_curr=toilet_total_curr,
-        toilet_change=toilet_change,
-        toilet_avg_prev=toilet_avg_prev,
-        toilet_avg_curr=toilet_avg_curr,
-        toilet_avg_change_label=toilet_avg_change_label,
-        reference_metrics_block=reference_metrics_block,
-        toilet_delta_summary=toilet_delta_summary,
-        meal_breakdown_curr=meal_breakdown_curr,
-        physical_prev=_safe_text(prev_week.get("physical")),
-        cognitive_prev=_safe_text(prev_week.get("cognitive")),
-        nursing_prev=_safe_text(prev_week.get("nursing")),
-        functional_prev=_safe_text(prev_week.get("functional")),
-        physical_curr=_safe_text(curr_week.get("physical")),
-        cognitive_curr=_safe_text(curr_week.get("cognitive")),
-        nursing_curr=_safe_text(curr_week.get("nursing")),
-        functional_curr=_safe_text(curr_week.get("functional")),
+        physical_trend=physical_trend,
+        cognitive_trend=cognitive_trend,
+        behavior_trend=behavior_trend,
+        physical_observation=physical_observation,
+        physical_bridge=physical_bridge,
+        physical_evidence=physical_evidence,
+        physical_intervention=physical_intervention,
+        cognitive_observation=cognitive_observation,
+        cognitive_evidence=cognitive_evidence,
+        cognitive_intervention=cognitive_intervention,
+        behavior_observation=behavior_observation,
+        behavior_evidence=behavior_evidence,
+        behavior_intervention=behavior_intervention,
     )
