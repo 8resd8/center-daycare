@@ -3,7 +3,7 @@ from __future__ import annotations
 import openai
 import streamlit as st
 
-from prompts import WEEKLY_WRITER_SYSTEM_PROMPT, WEEKLY_WRITER_USER_TEMPLATE
+from weekly_prompt import WEEKLY_WRITER_SYSTEM_PROMPT, WEEKLY_WRITER_USER_TEMPLATE
 
 
 def _get_openai_client() -> openai.OpenAI:
