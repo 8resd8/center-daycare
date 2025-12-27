@@ -147,25 +147,20 @@ def _format_input_data(name, date_range, payload) -> str:
     )
     behavior_intervention = _pick_line(nursing_curr, 2)
 
+    # Debug: Print the values being passed
+    print(f"[DEBUG] 주간 특이사항 - {name}:")
+    print(f"[DEBUG] [신체] 저번주: {physical_prev}")
+    print(f"[DEBUG] [신체] 이번주: {physical_curr}")
+    print(f"[DEBUG] [인지] 저번주: {cognitive_prev}")
+    print(f"[DEBUG] [인지] 이번주: {cognitive_curr}")
+    print("="*50)
+    
     return WEEKLY_WRITER_USER_TEMPLATE.format(
         name=name,
         start_date=date_range[0].strftime("%Y-%m-%d"),
         end_date=date_range[1].strftime("%Y-%m-%d"),
-        physical_trend=physical_trend,
-        cognitive_trend=cognitive_trend,
-        behavior_trend=behavior_trend,
-        # Priority 1: Physical
         physical_prev=physical_prev,
         physical_curr=physical_curr,
-        # Priority 2: Cognitive
         cognitive_prev=cognitive_prev,
         cognitive_curr=cognitive_curr,
-        # Priority 3: Previous Weekly Evaluation
-        previous_weekly_report=previous_weekly_report,
-        # Priority 4: Nursing
-        nursing_prev=nursing_prev,
-        nursing_curr=nursing_curr,
-        # Priority 5: Functional
-        functional_prev=functional_prev,
-        functional_curr=functional_curr,
     )

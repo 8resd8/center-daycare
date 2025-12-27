@@ -1,70 +1,159 @@
 import streamlit as st
 from openai import OpenAI
 import json
+from daily_prompt import get_evaluation_prompt
 
-class AIEvaluator:
-    def __init__(self):
-        try:
-            self.client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-        except Exception as e:
-            st.error(f"OpenAI 클라이언트 초기화 오류: {e}")
-            self.client = None
 
-    def evaluate_daily_record(self, record):
-        if not self.client:
-            return None
+def evaluate_note_with_ai(note_text: str, category: str = '', writer: str = '', customer_name: str = '', date: str = ''):
+    if not note_text or note_text.strip() in ['특이사항 없음', '결석']:
+        return None
+    
+    try:
+        client = OpenAI(api_key=st.secrets['OPENAI_API_KEY'])
+    except Exception as e:
+        print(f'OpenAI 클라이언트 초기화 오류: {e}')
+        return None
+    
+    system_prompt, user_prompt = get_evaluation_prompt(note_text, category, writer, customer_name, date)
+    
+    try:
+        response = client.chat.completions.create(
+            model='gpt-4o-mini',
+            messages=[
+                {'role': 'system', 'content': system_prompt},
+                {'role': 'user', 'content': user_prompt}
+            ],
+            temperature=0.7,
+            response_format={'type': 'json_object'}
+        )
+        
+        result = json.loads(response.choices[0].message.content)
+        return result
+    except Exception as e:
+        print(f'AI 평가 중 오류 발생: {e}')
+        return None
 
-        prompt = f"""
-        당신은 주간보호센터 요양 기록을 감수하고 품질을 높이는 AI 전문가입니다.
-        아래 입력된 기록을 분석하여 영역별로 평가하고, 필요하다면 더 나은 문장으로 수정해 주세요.
 
-        [입력 데이터]
-        - 날짜: {record.get('date', '날짜 없음')}
-        - 신체활동(physical): {record.get('physical_note', '')}
-        - 인지관리(cognitive): {record.get('cognitive_note', '')}
-        - 간호관리(nursing): {record.get('nursing_note', '')}
-        - 기능회복(recovery): {record.get('functional_note', '')}
+def save_ai_evaluation(record_id: int, category: str, note_writer_user_id: int, evaluation_result: dict, db_conn, original_text: str = None):
+    cursor = db_conn.cursor()
+    
+    category_map = {
+        "PHYSICAL": "신체",
+        "COGNITIVE": "인지", 
+        "NURSING": "간호",
+        "RECOVERY": "기능"
+    }
+    korean_category = category_map.get(category, category)
+    
+    valid_grades = ['우수', '평균', '개선', '평가없음']
+    
+    if evaluation_result:
+        content_quality_score = evaluation_result.get('consistency_score', 0)
+        specificity_score = evaluation_result.get('specificity_score', 0)
+        professionalism_score = evaluation_result.get('grammar_score', 0)
+        
+        average_score = (content_quality_score + specificity_score + professionalism_score) / 3
 
-        [공통 작성 지침]
-        - 말투: 모든 'revised_sentence(수정 제안)'는 반드시 '~했음', '~하심', '~함' 등의 명사형 종결 말투를 사용하세요. (예: 식사를 잘 하심, 프로그램에 적극 참여함)
-        - revised_sentence: 부연 설명 없이 수정된 문장만 출력하세요.
-
-        [평가 기준 및 수정 가이드]
-
-        1. 신체활동 / 인지관리 영역
-           - 우수: '상황(언제/어디서) -> 관찰(무엇을) -> 조치/반응(어떻게 했다)'의 육하원칙 구조가 명확함.
-           - 평균: 의미는 통하지만 구체적인 상황이나 조치가 다소 부족하거나 문장이 평범함.
-           - 개선: 내용이 없거나, 너무 짧거나, 문맥이 이상하여 전면 수정이 필요함.
-           - 수정 목표: '상황-관찰-조치' 구조를 갖추도록 내용을 보강하여 작성.
-
-        2. 간호관리 / 기능회복 영역
-           - 우수: 어르신의 관찰 내용, 행동, 건강 상태가 구체적이고 문장의 흐름이 자연스러움.
-           - 평균: 의미는 통하지만 구체성(수치, 정확한 상태 등)이 부족하거나 문장이 다소 어색함.
-           - 개선: 정보가 너무 모호하거나, 오타/파싱 오류로 인해 이해가 어려워 수정이 필요함.
-           - 수정 목표: 구체적인 상태를 명시하고 자연스러운 흐름으로 다듬어 작성.
-
-        [JSON 출력 형식]
-        응답은 반드시 아래 JSON 포맷으로만 출력해야 합니다.
-        {{
-          "date": "{record.get('date')}",
-          "physical": {{"grade": "우수|평균|개선", "revised_sentence": "수정된 문장", "reason": "평가 이유", "original_sentence": "{record.get('physical_note', '')}"}},
-          "cognitive": {{"grade": "우수|평균|개선", "revised_sentence": "수정된 문장", "reason": "평가 이유", "original_sentence": "{record.get('cognitive_note', '')}"}},
-          "nursing": {{"grade": "우수|평균|개선", "revised_sentence": "수정된 문장", "reason": "평가 이유", "original_sentence": "{record.get('nursing_note', '')}"}},
-          "recovery": {{"grade": "우수|평균|개선", "revised_sentence": "수정된 문장", "reason": "평가 이유", "original_sentence": "{record.get('functional_note', '')}"}}
-        }}
-        """
-
-        try:
-            response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant that outputs strictly in JSON format."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                response_format={"type": "json_object"}
+        if average_score >= 70:
+            korean_grade = '우수'
+        elif average_score >= 55:
+            korean_grade = '평균'
+        else:
+            korean_grade = '개선'
+        
+        reason_text = evaluation_result.get('reasoning_process')
+        suggestion_text = evaluation_result.get('suggestion_text')
+    else:
+        # For "특이사항 없음" or empty notes
+        content_quality_score = 0
+        specificity_score = 0
+        professionalism_score = 0
+        korean_grade = '평가없음'
+        reason_text = ''
+        suggestion_text = ''
+    
+    check_sql = 'SELECT ai_eval_id FROM ai_evaluations WHERE record_id = %s AND category = %s'
+    cursor.execute(check_sql, (record_id, korean_category))
+    
+    if cursor.fetchone():
+        update_sql = '''
+            UPDATE ai_evaluations SET
+                consistency_score = %s,
+                grammar_score = %s,
+                specificity_score = %s,
+                grade_code = %s,
+                reason_text = %s,
+                suggestion_text = %s,
+                original_text = %s,
+                note_writer_user_id = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE record_id = %s AND category = %s
+        '''
+        cursor.execute(update_sql, (
+            content_quality_score, professionalism_score, specificity_score,
+            korean_grade, reason_text, suggestion_text, original_text,
+            note_writer_user_id, record_id, korean_category
+        ))
+    else:
+        insert_sql = '''
+            INSERT INTO ai_evaluations (
+                record_id, category, consistency_score, grammar_score,
+                specificity_score, grade_code, reason_text,
+                suggestion_text, original_text, note_writer_user_id, created_at, updated_at
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )
-            return json.loads(response.choices[0].message.content)
-        except Exception as e:
-            print(f"AI 평가 중 오류 발생: {e}")
-            return None
+        '''
+        cursor.execute(insert_sql, (
+            record_id, korean_category, content_quality_score, professionalism_score,
+            specificity_score, korean_grade, reason_text,
+            suggestion_text, original_text, note_writer_user_id
+        ))
+    
+    db_conn.commit()
+    cursor.close()
+
+
+def process_daily_note_evaluation(record_id: int, category: str, note_text: str, note_writer_user_id: int, writer: str = '', customer_name: str = '', date: str = '', db_conn=None):
+    
+    if not note_text or note_text.strip() in ['특이사항 없음', '결석', '']:
+        evaluation_result = None
+    else:
+        evaluation_result = evaluate_note_with_ai(note_text, category, writer, customer_name, date)
+    
+    if evaluation_result:
+        # Calculate grade on server based on scores
+        consistency_score = evaluation_result.get('consistency_score', 0)
+        grammar_score = evaluation_result.get('grammar_score', 0)
+        specificity_score = evaluation_result.get('specificity_score', 0)
+        
+        average_score = (consistency_score + grammar_score + specificity_score) / 3
+        
+        if average_score >= 90:
+            korean_grade = '우수'
+        elif average_score >= 75:
+            korean_grade = '평균'
+        else:
+            korean_grade = '개선'
+        
+        # Add the calculated grade to the evaluation result
+        evaluation_result['grade_code'] = korean_grade
+    else:
+        korean_grade = '평가없음'
+        # Create evaluation result with 0 scores for empty or special cases
+        evaluation_result = {
+            'consistency_score': 0,
+            'grammar_score': 0,
+            'specificity_score': 0,
+            'grade_code': '평가없음',
+            'reasoning_process': '',
+            'suggestion_text': ''
+        }
+    
+    save_ai_evaluation(record_id, category, note_writer_user_id, evaluation_result, db_conn, note_text)
+    
+    return {
+        'grade_code': korean_grade,  # Return Korean grade
+        'evaluation': evaluation_result
+    }
