@@ -8,7 +8,7 @@ import streamlit.components.v1 as components
 
 from modules.pdf_parser import CareRecordParser
 from modules.database import save_parsed_data, save_weekly_status, load_weekly_status, resolve_customer_id, get_db_connection
-from modules.ai_daily_validator import AIEvaluator
+from modules.ai_daily_validator import process_daily_note_evaluation
 from modules.weekly_data_analyzer import compute_weekly_status
 from modules.ai_weekly_writer import generate_weekly_report
 
@@ -235,7 +235,6 @@ def _batch_evaluate_all(person_entries):
     progress_bar = st.progress(0)
     status_text = st.empty()
     total = len(person_entries)
-    evaluator = AIEvaluator()
     
     for i, entry in enumerate(person_entries):
         status_text.text(f"{entry['person_name']} 평가 중... ({i+1}/{total})")
@@ -289,8 +288,28 @@ def _batch_evaluate_all(person_entries):
             cursor.close()
             conn.close()
             
-            # Evaluate all records for this person
-            evaluator.evaluate_person(records)
+            # Evaluate all records for this person using process_daily_note_evaluation
+            for record in records:
+                categories = [
+                    ("PHYSICAL", record.get("physical_note", ""), record.get("writer_physical")),
+                    ("COGNITIVE", record.get("cognitive_note", ""), record.get("writer_cognitive")),
+                    ("NURSING", record.get("nursing_note", ""), record.get("writer_nursing")),
+                    ("RECOVERY", record.get("functional_note", ""), record.get("writer_recovery"))
+                ]
+                
+                for category, text, category_writer in categories:
+                    note_writer_id = record.get(f"writer_{category.lower()}_id", 1)
+                    
+                    process_daily_note_evaluation(
+                        record_id=record["record_id"],
+                        category=category,
+                        note_text=text,
+                        note_writer_user_id=note_writer_id,
+                        writer=category_writer or "",
+                        customer_name=record.get("customer_name", ""),
+                        date=record.get("date", ""),
+                        db_conn=get_db_connection()
+                    )
             
         except Exception as e:
             st.error(f"{entry['person_name']} 평가 중 오류: {e}")
@@ -736,20 +755,27 @@ with main_tab2:
 
         grade_filter = st.selectbox(
             "등급 필터",
-            options=["개선", "우수", "평균", "전체"],
+            options=["개선", "우수", "평균", "평가없음", "전체"],
             index=0,
             key="ai_grade_filter",
         )
+
 
         col1, col2 = st.columns([1, 4])
         with col1:
             start_btn = st.button("🚀 전체 평가 시작", type="primary")
 
         if start_btn:
-            evaluator = AIEvaluator()
             progress_bar = st.progress(0)
             status_text = st.empty()
             total = len(person_records)
+            
+            # Get database connection
+            db_conn = get_db_connection()
+            if not db_conn:
+                st.error("데이터베이스 연결에 실패했습니다.")
+                st.stop()
+
 
             # Use the new evaluate_parsed_person method for in-memory data
             eval_results = {}
@@ -757,6 +783,31 @@ with main_tab2:
             for i, record in enumerate(person_records):
                 date = record.get("date", "날짜 없음")
                 status_text.text(f"🔍 {date} 기록 평가 중... ({i+1}/{total})")
+                
+                # Get customer_id first
+                customer_id = resolve_customer_id(
+                    name=record.get("customer_name", ""),
+                    recognition_no=record.get("customer_recognition_no"),
+                    birth_date=record.get("customer_birth_date")
+                )
+                
+                if not customer_id:
+                    st.warning(f"{record.get('customer_name', '')} 고객을 찾을 수 없습니다. 건너뜁니다.")
+                    continue
+                
+                # Get record_id from database
+                cursor = db_conn.cursor()
+                cursor.execute(
+                    "SELECT record_id FROM daily_infos WHERE customer_id=%s AND date=%s LIMIT 1",
+                    (customer_id, date)
+                )
+                db_record = cursor.fetchone()
+                record_id = db_record[0] if db_record else None
+                cursor.close()
+                
+                if not record_id:
+                    st.warning(f"{date} 기록을 DB에서 찾을 수 없습니다. 건너뜁니다.")
+                    continue
                 
                 # Evaluate this record
                 record_eval = {}
@@ -770,19 +821,27 @@ with main_tab2:
                 ]
                 
                 for category, text, category_writer in categories:
-                    if text and text.strip() and text.strip() != "특이사항 없음":
-                        evaluation = evaluator._evaluate_note_only(
-                            original_text=text,
-                            customer_name=record.get("customer_name", ""),
-                            date=date,
-                            writer=category_writer or writer,
-                            category=category
-                        )
-                        if evaluation:
-                            record_eval[category.lower()] = evaluation
+                    note_writer_id = record.get(f"writer_{category.lower()}_id") or 1  # Default to 1 if not available
+                    
+                    result = process_daily_note_evaluation(
+                        record_id=record_id,
+                        category=category,
+                        note_text=text,
+                        note_writer_user_id=note_writer_id,
+                        writer=category_writer or writer,
+                        customer_name=record.get("customer_name", ""),
+                        date=date,
+                        db_conn=db_conn
+                    )
+                    
+                    if result and result["evaluation"]:
+                        record_eval[category.lower()] = result["evaluation"]
                 
                 if record_eval:
-                    eval_results[date] = record_eval
+                    # Use person_name::date as key to avoid conflicts between people
+                    person_name = record.get("customer_name", "미상")
+                    eval_key = f"{person_name}::{date}"
+                    eval_results[eval_key] = record_eval
                 
                 progress_bar.progress((i + 1) / total)
             
@@ -801,6 +860,11 @@ with main_tab2:
             progress_bar.progress(1.0)
             status_text.text("✅ 분석 완료!")
             st.success("모든 평가가 완료되었습니다!")
+            
+            # Close database connection
+            if db_conn:
+                db_conn.close()
+            
             st.rerun()
 
         if active_doc.get("eval_results"):
@@ -827,17 +891,34 @@ with main_tab2:
                     return {}
 
                 rows = []
-                for date, res in active_doc["eval_results"].items():
+                for eval_key, res in active_doc["eval_results"].items():
+                    # Parse person_name::date format
+                    if "::" in eval_key:
+                        _, date = eval_key.split("::", 1)
+                    else:
+                        date = eval_key  # Fallback for old format
+
                     item = _pick_item(res or {}, category_key)
                     original_record = next((r for r in person_records if r["date"] == date), {})
 
-                    grade = item.get("grade", "-")
-                    if grade_filter != "전체" and grade != grade_filter:
+                    grade = item.get("grade_code", "-")
+                    # Convert English grade_code to Korean display
+                    grade_map = {
+                        "EXCELLENT": "우수",
+                        "NORMAL": "평균",
+                        "IMPROVE": "개선",
+                        "NONE": "평가없음"
+                    }
+                    # Handle both English and Korean inputs
+                    if grade in grade_map:
+                        grade_display = grade_map[grade]
+                    else:
+                        grade_display = grade if grade != "-" else "-"
+
+                    if grade_filter != "전체" and grade_display != grade_filter:
                         continue
 
-                    reason = item.get("reason", "")
-                    if grade != "개선":
-                        reason = ""
+                    reason = item.get("reasoning_process", "")
 
                     original_text = original_record.get(note_key, "")
                     if not original_text:
@@ -845,8 +926,8 @@ with main_tab2:
 
                     rows.append({
                         "날짜": date,
-                        "등급": grade,
-                        "수정 제안": item.get("revised_sentence", ""),
+                        "등급": grade_display,
+                        "수정 제안": item.get("suggestion_text", ""),
                         "원본 내용": original_text,
                         "이유": reason,
                         "작성자": original_record.get(writer_key, "")
