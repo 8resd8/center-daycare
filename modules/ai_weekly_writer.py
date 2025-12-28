@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import streamlit as st
 
-from weekly_prompt import WEEKLY_WRITER_SYSTEM_PROMPT, WEEKLY_WRITER_USER_TEMPLATE
-from modules.ai_client import get_ai_client
+from modules.clients.weekly_prompt import WEEKLY_WRITER_SYSTEM_PROMPT, WEEKLY_WRITER_USER_TEMPLATE
+from modules.clients.ai_client import get_ai_client
 
 
 def generate_weekly_report(customer_name, date_range, analysis_payload):

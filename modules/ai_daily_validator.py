@@ -1,8 +1,8 @@
 import streamlit as st
 import json
-from daily_prompt import get_evaluation_prompt
+from modules.clients.daily_prompt import get_evaluation_prompt
 from modules.repositories import AiEvaluationRepository
-from modules.ai_client import get_ai_client
+from modules.clients.ai_client import get_ai_client
 
 
 # Initialize repository
