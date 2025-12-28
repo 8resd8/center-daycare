@@ -7,8 +7,9 @@ import json
 import streamlit.components.v1 as components
 
 from modules.pdf_parser import CareRecordParser
-from modules.database import save_parsed_data, save_weekly_status, load_weekly_status, db_query, db_transaction
+from modules.database import save_parsed_data, save_weekly_status, load_weekly_status
 from modules.customers import resolve_customer_id
+from modules.db_connection import db_query, db_transaction
 from modules.repositories import CustomerRepository, DailyInfoRepository
 from modules.ai_daily_validator import process_daily_note_evaluation
 from modules.weekly_data_analyzer import compute_weekly_status

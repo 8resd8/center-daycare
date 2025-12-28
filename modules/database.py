@@ -5,7 +5,6 @@ Direct SQL queries have been moved to repository classes.
 """
 
 from modules.repositories import WeeklyStatusRepository, DailyInfoRepository
-from modules.db_connection import db_query, db_transaction
 
 
 # Initialize repositories
@@ -28,51 +27,8 @@ def save_parsed_data(records):
     return daily_info_repo.save_parsed_data(records)
 
 
-# Legacy functions kept for backward compatibility
-# These will be removed in future versions
 def get_db_connection():
-    """Legacy function - use repositories instead."""
+    """Get a database connection using Streamlit secrets."""
     import streamlit as st
     import mysql.connector
     return mysql.connector.connect(**st.secrets["mysql"])
-
-
-def get_or_create_customer(cursor, record):
-    """Legacy function - use CustomerRepository instead."""
-    # This is now handled in DailyInfoRepository.save_parsed_data
-    pass
-
-
-def _find_existing_record_id(cursor, customer_id, record_date):
-    """Legacy function - use DailyInfoRepository instead."""
-    return daily_info_repo.find_existing_record_id(customer_id, record_date)
-
-
-def _delete_daily_record(cursor, record_id):
-    """Legacy function - use DailyInfoRepository instead."""
-    daily_info_repo.delete_daily_record(record_id)
-
-
-def _insert_daily_info(cursor, customer_id, record):
-    """Legacy function - use DailyInfoRepository instead."""
-    return daily_info_repo.insert_daily_info(customer_id, record)
-
-
-def _replace_daily_physicals(cursor, record_id, record):
-    """Legacy function - use DailyInfoRepository instead."""
-    daily_info_repo.replace_daily_physicals(record_id, record)
-
-
-def _replace_daily_cognitives(cursor, record_id, record):
-    """Legacy function - use DailyInfoRepository instead."""
-    daily_info_repo.replace_daily_cognitives(record_id, record)
-
-
-def _replace_daily_nursings(cursor, record_id, record):
-    """Legacy function - use DailyInfoRepository instead."""
-    daily_info_repo.replace_daily_nursings(record_id, record)
-
-
-def _replace_daily_recoveries(cursor, record_id, record):
-    """Legacy function - use DailyInfoRepository instead."""
-    daily_info_repo.replace_daily_recoveries(record_id, record)
