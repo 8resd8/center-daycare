@@ -220,14 +220,14 @@ def _batch_generate_weekly_reports(person_entries):
             continue
             
         # Generate AI report
-        from modules.ai_weekly_writer import generate_weekly_report
+        from modules.services.weekly_report_service import report_service
         from modules.database import save_weekly_status
         prev_range, curr_range = result["ranges"]
         ai_payload = result.get("trend", {}).get("ai_payload")
         
         if ai_payload:
             try:
-                report = generate_weekly_report(
+                report = report_service.generate_weekly_report(
                     entry["person_name"],
                     (prev_range[0], curr_range[1]),
                     ai_payload,
@@ -266,7 +266,7 @@ def _batch_evaluate_all(person_entries):
         # Get person records from database
         try:
             from modules.db_connection import db_query
-            from modules.ai_daily_validator import process_daily_note_evaluation
+            from modules.services.daily_report_service import evaluation_service
             
             with db_query() as cursor:
                 # Get customer_id first
@@ -322,7 +322,7 @@ def _batch_evaluate_all(person_entries):
                 for category, text, category_writer in categories:
                     note_writer_id = record.get(f"writer_{category.lower()}_id", 1)
                     
-                    process_daily_note_evaluation(
+                    evaluation_service.process_daily_note_evaluation(
                         record_id=record["record_id"],
                         category=category,
                         note_text=text,

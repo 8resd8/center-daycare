@@ -9,7 +9,7 @@ import streamlit.components.v1 as components
 from modules.database import save_weekly_status, load_weekly_status
 from modules.customers import resolve_customer_id
 from modules.weekly_data_analyzer import compute_weekly_status
-from modules.ai_weekly_writer import generate_weekly_report
+from modules.services.weekly_report_service import report_service
 from modules.ui.ui_helpers import get_active_doc, get_active_person_records
 
 
@@ -201,7 +201,7 @@ def render_records_tab():
                         try:
                             progress_bar.progress(15)
                             status_line.text("상태변화 기록지 생성중... 15%")
-                            report = generate_weekly_report(
+                            report = report_service.generate_weekly_report(
                                 customer_name,
                                 (prev_range[0], curr_range[1]),
                                 ai_payload,

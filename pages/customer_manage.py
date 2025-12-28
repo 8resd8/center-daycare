@@ -29,20 +29,6 @@ with st.sidebar:
     if nav == "파일 처리":
         st.switch_page("app.py")
 
-def _show_schema_help():
-    st.error("데이터베이스 구조가 일치하지 않습니다.")
-    with st.expander("필요한 SQL 스키마 보기"):
-        st.code(
-            """
-            ALTER TABLE customers
-                ADD COLUMN birth_date DATE NULL,
-    ADD COLUMN gender ENUM('남성','여성') NULL,
-    ADD COLUMN recognition_no VARCHAR(50) NULL,
-    ADD COLUMN benefit_start_date DATE NULL,
-    ADD COLUMN grade VARCHAR(20) NULL;
-            """.strip(),
-            language="sql",
-        )
 
 # --- 메인 로직 ---
 
@@ -61,7 +47,6 @@ with st.container():
 try:
     customers_data = list_customers(keyword=search_keyword.strip() or None)
 except mysql.connector.Error:
-    _show_schema_help()
     st.stop()
 
 # Pandas DataFrame으로 변환
@@ -70,7 +55,7 @@ df = pd.DataFrame(customers_data)
 if df.empty:
     df = pd.DataFrame(columns=["customer_id", "name", "birth_date", "gender", "recognition_no", "benefit_start_date", "grade"])
 
-# [중요] 날짜 컬럼을 Pandas의 datetime 객체로 확실하게 변환 (입력 버그 방지)
+# [중요] 날짜 컬럼을 Pandas의 datetime 객체로 확실하게 변환
 df["birth_date"] = pd.to_datetime(df["birth_date"], errors='coerce')
 df["benefit_start_date"] = pd.to_datetime(df["benefit_start_date"], errors='coerce')
 

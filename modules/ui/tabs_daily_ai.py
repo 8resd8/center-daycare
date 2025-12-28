@@ -4,7 +4,7 @@ import streamlit as st
 import pandas as pd
 from modules.db_connection import db_query
 from modules.customers import resolve_customer_id
-from modules.ai_daily_validator import process_daily_note_evaluation
+from modules.services.daily_report_service import evaluation_service
 from modules.ui.ui_helpers import get_active_doc, get_active_person_records
 
 
@@ -81,7 +81,7 @@ def render_ai_evaluation_tab():
                 for category, text, category_writer in categories:
                     note_writer_id = record.get(f"writer_{category.lower()}_id") or 1  # Default to 1 if not available
                     
-                    result = process_daily_note_evaluation(
+                    result = evaluation_service.process_daily_note_evaluation(
                         record_id=record_id,
                         category=category,
                         note_text=text,
