@@ -1,0 +1,342 @@
+"""사이드바 UI 모듈 - 파일 업로드 및 선택"""
+
+import streamlit as st
+import hashlib
+from modules.pdf_parser import CareRecordParser
+from modules.database import save_parsed_data
+from modules.ui_helpers import (
+    get_active_doc, get_person_keys_for_doc, iter_person_entries, 
+    ensure_active_person, person_checkbox_key, select_person,
+    get_person_done, set_person_done
+)
+
+
+def render_sidebar():
+    """사이드바 렌더링"""
+    with st.sidebar:
+        nav = st.radio(
+            "메뉴",
+            options=["파일 처리", "수급자 관리"],
+            index=0,
+            horizontal=True,
+            key="sidebar_nav_app",
+        )
+        if nav == "수급자 관리":
+            st.switch_page("pages/customer_manage.py")
+
+        st.header("📂 파일 처리")
+
+        # 1. 파일 업로드 섹션
+        uploaded_files = st.file_uploader(
+            "PDF 기록지 업로드",
+            type=["pdf"],
+            accept_multiple_files=True,
+            key="pdf_uploader"
+        )
+
+        if uploaded_files:
+            newly_added_id = None
+            for f in uploaded_files:
+                file_bytes = f.getvalue()
+                # 파일 내용 기반 해시 생성 (중복 방지)
+                file_id_source = f"{f.name}\0".encode("utf-8") + file_bytes
+                file_id = hashlib.sha256(file_id_source).hexdigest()[:16]
+
+                # 이미 존재하는 파일인지 확인
+                exists = any(d.get("id") == file_id for d in st.session_state.docs)
+
+                if not exists:
+                    try:
+                        with st.spinner(f"PDF 정밀 분석 중... ({f.name})"):
+                            parser = CareRecordParser(f)
+                            parsed = parser.parse()
+
+                        new_doc = {
+                            "id": file_id,
+                            "name": f.name,
+                            "completed": False,
+                            "parsed_data": parsed,
+                            "eval_results": {},
+                            "error": None,
+                        }
+                        st.session_state.docs.append(new_doc)
+                        newly_added_id = file_id # 새로 추가된 파일 ID 기억
+
+                    except Exception as e:
+                        st.error(f"{f.name} 처리 중 오류: {e}")
+                        st.session_state.docs.append({
+                            "id": file_id,
+                            "name": f.name,
+                            "completed": False,
+                            "parsed_data": [],
+                            "error": str(e),
+                        })
+
+            # 새로 추가된 파일이 있으면 그 파일로 자동 전환
+            if newly_added_id:
+                st.session_state.active_doc_id = newly_added_id
+                st.session_state.active_person_key = None
+                st.rerun()
+
+        st.divider()
+
+        if st.session_state.docs:
+            if not st.session_state.active_doc_id:
+                st.session_state.active_doc_id = st.session_state.docs[0]["id"]
+
+            active_doc = get_active_doc()
+            st.subheader("📄 현재 파일")
+            if active_doc:
+                st.write(f"**{active_doc['name']}**")
+            else:
+                st.write("-")
+
+            if active_doc and active_doc.get("parsed_data"):
+                # Auto-save all parsed data to DB (only once)
+                if not active_doc.get("db_saved"):
+                    with st.spinner("DB 자동 저장 중..."):
+                        count = save_parsed_data(active_doc["parsed_data"])
+                        if count > 0:
+                            st.success(f"✅ {count}건의 기록이 자동 저장되었습니다.")
+                            # Mark as saved
+                            for doc in st.session_state.docs:
+                                if doc["id"] == active_doc["id"]:
+                                    doc["db_saved"] = True
+                                    break
+
+            # Batch AI Processing buttons
+            person_entries = iter_person_entries()
+            if person_entries:
+                st.divider()
+                st.markdown("#### 🤖 일괄 AI 처리")
+                
+                # Custom CSS for green text color
+                st.markdown("""
+                <style>
+                .green-text {
+                    color: #00C851 !important;
+                }
+                </style>
+                """, unsafe_allow_html=True)
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("📝 주간 상태변화 기록지 생성", 
+                               use_container_width=True, 
+                               help="전체 인원의 주간 상태변화 기록지를 일괄 생성합니다"):
+                        _batch_generate_weekly_reports(person_entries)
+                with col2:
+                    if st.button("🔍 특이사항 평가 시작", 
+                               use_container_width=True,
+                               help="전체 인원의 특이사항을 일괄 평가합니다"):
+                        _batch_evaluate_all(person_entries)
+
+            st.subheader("👥 전체 인원")
+            person_entries = iter_person_entries()
+            person_count = len(person_entries)
+            st.caption(f"총 {person_count}명")
+            if not person_entries:
+                st.info("파싱된 인원이 없습니다.")
+            else:
+                st.caption("이름을 선택하면 메인 화면에 상세 기록이 표시됩니다.")
+                active_person_key = ensure_active_person()
+                for entry in person_entries:
+                    is_active = entry["key"] == active_person_key
+                    cols = st.columns([0.75, 0.25])
+                    display_label = f"{entry['person_name']} · {entry['record_count']}건"
+                    button_type = "primary" if is_active else "secondary"
+                    with cols[0]:
+                        if st.button(
+                            display_label,
+                            key=f"person_btn_{entry['key']}",
+                            type=button_type,
+                            use_container_width=True
+                        ):
+                            select_person(entry["key"], entry["doc_id"])
+                            st.rerun()
+                    with cols[1]:
+                        done_value = st.checkbox(
+                            "완료",
+                            value=get_person_done(entry["key"]),
+                            key=f"done_{entry['key']}"
+                        )
+                        set_person_done(entry["key"], done_value)
+        else:
+            st.info("좌측 상단에서 PDF 파일을 업로드해주세요.")
+
+
+def _batch_generate_weekly_reports(person_entries):
+    """전체 인원의 주간 상태변화 기록지를 일괄 생성합니다."""
+    if not person_entries:
+        st.warning("처리할 인원이 없습니다.")
+        return
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    total = len(person_entries)
+    
+    for i, entry in enumerate(person_entries):
+        status_text.text(f"{entry['person_name']} 처리 중... ({i+1}/{total})")
+        
+        # Get person records
+        doc = next((d for d in st.session_state.docs if d["id"] == entry["doc_id"]), None)
+        if not doc:
+            continue
+            
+        person_records = [
+            r for r in doc.get("parsed_data", [])
+            if (r.get("customer_name") or "미상") == entry["person_name"]
+        ]
+        
+        if not person_records:
+            continue
+            
+        # Resolve customer_id
+        from modules.customers import resolve_customer_id
+        customer_id = (person_records[0].get("customer_id") if person_records else None)
+        if customer_id is None:
+            try:
+                customer_id = resolve_customer_id(
+                    name=entry["person_name"],
+                    recognition_no=(person_records[0].get("customer_recognition_no") if person_records else None),
+                    birth_date=(person_records[0].get("customer_birth_date") if person_records else None),
+                )
+            except Exception:
+                customer_id = None
+        
+        if customer_id is None:
+            continue
+        
+        # Compute weekly status
+        from modules.weekly_data_analyzer import compute_weekly_status
+        week_dates = sorted([r.get("date") for r in person_records if r.get("date")])
+        if not week_dates:
+            continue
+            
+        week_start = week_dates[-1]
+        result = compute_weekly_status(entry["person_name"], week_start, customer_id)
+        
+        if result.get("error") or not result.get("scores"):
+            continue
+            
+        # Generate AI report
+        from modules.ai_weekly_writer import generate_weekly_report
+        from modules.database import save_weekly_status
+        prev_range, curr_range = result["ranges"]
+        ai_payload = result.get("trend", {}).get("ai_payload")
+        
+        if ai_payload:
+            try:
+                report = generate_weekly_report(
+                    entry["person_name"],
+                    (prev_range[0], curr_range[1]),
+                    ai_payload,
+                )
+                
+                if not isinstance(report, dict) or not report.get("error"):
+                    text_report = report if isinstance(report, str) else str(report)
+                    save_weekly_status(
+                        customer_id=customer_id,
+                        start_date=prev_range[0],
+                        end_date=curr_range[1],
+                        report_text=text_report,
+                    )
+            except Exception:
+                pass
+        
+        progress_bar.progress((i + 1) / total)
+    
+    status_text.text("✅ 모든 인원의 주간 상태변화 기록지 생성이 완료되었습니다.")
+    st.success("일괄 처리 완료!")
+
+
+def _batch_evaluate_all(person_entries):
+    """전체 인원의 특이사항을 일괄 평가합니다."""
+    if not person_entries:
+        st.warning("처리할 인원이 없습니다.")
+        return
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    total = len(person_entries)
+    
+    for i, entry in enumerate(person_entries):
+        status_text.text(f"{entry['person_name']} 평가 중... ({i+1}/{total})")
+        
+        # Get person records from database
+        try:
+            from modules.db_connection import db_query
+            from modules.ai_daily_validator import process_daily_note_evaluation
+            
+            with db_query() as cursor:
+                # Get customer_id first
+                cursor.execute(
+                    "SELECT customer_id FROM customers WHERE name = %s LIMIT 1",
+                    (entry["person_name"],)
+                )
+                customer_result = cursor.fetchone()
+                
+                if not customer_result:
+                    continue
+                    
+                customer_id = customer_result["customer_id"]
+                
+                # Get records for this customer
+                cursor.execute(
+                    """
+                    SELECT record_id, customer_name, date, 
+                           physical_note, cognitive_note, nursing_note, functional_note,
+                           writer_physical, writer_cognitive, writer_nursing, writer_recovery
+                    FROM daily_infos 
+                    WHERE customer_id = %s
+                    ORDER BY date DESC
+                    """,
+                    (customer_id,)
+                )
+                
+                records = []
+                for row in cursor.fetchall():
+                    records.append({
+                        "record_id": row["record_id"],
+                        "customer_name": row["customer_name"],
+                        "date": row["date"],
+                        "physical_note": row["physical_note"],
+                        "cognitive_note": row["cognitive_note"],
+                        "nursing_note": row["nursing_note"],
+                        "functional_note": row["functional_note"],
+                        "writer_physical": row["writer_physical"],
+                        "writer_cognitive": row["writer_cognitive"],
+                        "writer_nursing": row["writer_nursing"],
+                        "writer_recovery": row["writer_recovery"]
+                    })
+            
+            # Evaluate all records for this person using process_daily_note_evaluation
+            for record in records:
+                categories = [
+                    ("PHYSICAL", record.get("physical_note", ""), record.get("writer_physical")),
+                    ("COGNITIVE", record.get("cognitive_note", ""), record.get("writer_cognitive")),
+                    ("NURSING", record.get("nursing_note", ""), record.get("writer_nursing")),
+                    ("RECOVERY", record.get("functional_note", ""), record.get("writer_recovery"))
+                ]
+                
+                for category, text, category_writer in categories:
+                    note_writer_id = record.get(f"writer_{category.lower()}_id", 1)
+                    
+                    process_daily_note_evaluation(
+                        record_id=record["record_id"],
+                        category=category,
+                        note_text=text,
+                        note_writer_user_id=note_writer_id,
+                        writer=category_writer or "",
+                        customer_name=record.get("customer_name", ""),
+                        date=record.get("date", "")
+                    )
+            
+        except Exception as e:
+            st.error(f"{entry['person_name']} 평가 중 오류: {e}")
+        
+        progress_bar.progress((i + 1) / total)
+    
+    status_text.text("✅ 모든 인원의 특이사항 평가가 완료되었습니다.")
+    st.success("일괄 평가 완료!")
+    st.rerun()
