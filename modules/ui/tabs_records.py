@@ -10,7 +10,7 @@ from modules.database import save_weekly_status, load_weekly_status
 from modules.customers import resolve_customer_id
 from modules.weekly_data_analyzer import compute_weekly_status
 from modules.ai_weekly_writer import generate_weekly_report
-from modules.ui_helpers import get_active_doc, get_active_person_records
+from modules.ui.ui_helpers import get_active_doc, get_active_person_records
 
 
 def render_records_tab():

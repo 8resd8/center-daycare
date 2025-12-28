@@ -5,7 +5,7 @@ import pandas as pd
 from modules.db_connection import db_query
 from modules.customers import resolve_customer_id
 from modules.ai_daily_validator import process_daily_note_evaluation
-from modules.ui_helpers import get_active_doc, get_active_person_records
+from modules.ui.ui_helpers import get_active_doc, get_active_person_records
 
 
 def render_ai_evaluation_tab():

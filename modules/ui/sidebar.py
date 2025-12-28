@@ -4,7 +4,7 @@ import streamlit as st
 import hashlib
 from modules.pdf_parser import CareRecordParser
 from modules.database import save_parsed_data
-from modules.ui_helpers import (
+from modules.ui.ui_helpers import (
     get_active_doc, get_person_keys_for_doc, iter_person_entries, 
     ensure_active_person, person_checkbox_key, select_person,
     get_person_done, set_person_done
