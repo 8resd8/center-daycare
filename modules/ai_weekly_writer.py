@@ -146,14 +146,6 @@ def _format_input_data(name, date_range, payload) -> str:
         "지난주 대비 행동·안전 상태의 변화 여부를 관찰하였음",
     )
     behavior_intervention = _pick_line(nursing_curr, 2)
-
-    # Debug: Print the values being passed
-    print(f"[DEBUG] 주간 특이사항 - {name}:")
-    print(f"[DEBUG] [신체] 저번주: {physical_prev}")
-    print(f"[DEBUG] [신체] 이번주: {physical_curr}")
-    print(f"[DEBUG] [인지] 저번주: {cognitive_prev}")
-    print(f"[DEBUG] [인지] 이번주: {cognitive_curr}")
-    print("="*50)
     
     return WEEKLY_WRITER_USER_TEMPLATE.format(
         name=name,

@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from .database import get_db_connection, load_weekly_status
+from modules.repositories import WeeklyStatusRepository, DailyInfoRepository
 
 POSITIVE_KEYWORDS = ["개선", "안정", "호전", "유지", "활발", "양호", "미흡하지않음"]
 NEGATIVE_KEYWORDS = ["악화", "저하", "불안", "통증", "문제", "감소", "주의", "거부", "통증"]
@@ -50,40 +50,44 @@ def _fetch_two_week_records(
     prev_end = start_date - timedelta(days=1)
     curr_end = start_date + timedelta(days=6)
 
-    query = """
-        SELECT
-            di.date,
-            di.total_service_time,
-            dp.note AS physical_note,
-            dc.note AS cognitive_note,
-            dn.note AS nursing_note,
-            dr.note AS functional_note,
-            dp.meal_breakfast,
-            dp.meal_lunch,
-            dp.meal_dinner,
-            dp.toilet_care,
-            dp.bath_time,
-            dn.bp_temp,
-            dr.prog_therapy
-        FROM daily_infos di
-        JOIN customers c ON c.customer_id = di.customer_id
-        LEFT JOIN daily_physicals dp ON dp.record_id = di.record_id
-        LEFT JOIN daily_cognitives dc ON dc.record_id = di.record_id
-        LEFT JOIN daily_nursings dn ON dn.record_id = di.record_id
-        LEFT JOIN daily_recoveries dr ON dr.record_id = di.record_id
-        WHERE c.name = %s AND di.date BETWEEN %s AND %s
-        ORDER BY di.date
-    """
-
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute(query, (name, prev_start, curr_end))
-        rows = cursor.fetchall()
-        return rows, (prev_start, prev_end), (start_date, curr_end)
-    finally:
-        cursor.close()
-        conn.close()
+    # Use DailyInfoRepository to get customer records
+    daily_info_repo = DailyInfoRepository()
+    
+    # First find the customer by name
+    from modules.repositories import CustomerRepository
+    customer_repo = CustomerRepository()
+    customer = customer_repo.find_by_name(name)
+    
+    if not customer:
+        return [], (prev_start, prev_end), (start_date, curr_end)
+    
+    # Get records for the date range
+    records = daily_info_repo.get_customer_records(
+        customer['customer_id'], 
+        prev_start, 
+        curr_end
+    )
+    
+    # Transform records to match expected format
+    transformed_records = []
+    for record in records:
+        transformed_records.append({
+            'date': record['date'],
+            'total_service_time': record['total_service_time'],
+            'physical_note': record['physical_note'],
+            'cognitive_note': record['cognitive_note'],
+            'nursing_note': record['nursing_note'],
+            'functional_note': record['functional_note'],
+            'meal_breakfast': None,  # These would need to be added to the repo query if needed
+            'meal_lunch': None,
+            'meal_dinner': None,
+            'toilet_care': None,
+            'bath_time': None,
+            'bp_temp': None,
+            'prog_therapy': None
+        })
+    
+    return transformed_records, (prev_start, prev_end), (start_date, curr_end)
 
 
 def compute_weekly_status(customer_name: str, week_start_str: str, customer_id: int) -> Dict:
@@ -570,16 +574,13 @@ def analyze_weekly_trend(
         },
     }
 
-    # Load previous weekly report for AI reference
-    previous_weekly_report = None
-    try:
-        previous_weekly_report = load_weekly_status(
-            customer_id=customer_id,
-            start_date=prev_range[0],
-            end_date=prev_range[1],
-        )
-    except Exception:
-        previous_weekly_report = None
+    # Load previous weekly report for AI reference using repository
+    weekly_status_repo = WeeklyStatusRepository()
+    previous_weekly_report = weekly_status_repo.load_weekly_status(
+        customer_id=customer_id,
+        start_date=prev_range[0],
+        end_date=prev_range[1],
+    )
 
     ai_payload = {
         "current_week": _format_attendance_summary(

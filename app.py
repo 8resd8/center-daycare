@@ -7,7 +7,9 @@ import json
 import streamlit.components.v1 as components
 
 from modules.pdf_parser import CareRecordParser
-from modules.database import save_parsed_data, save_weekly_status, load_weekly_status, resolve_customer_id, get_db_connection
+from modules.database import save_parsed_data, save_weekly_status, load_weekly_status, db_query, db_transaction
+from modules.customers import resolve_customer_id
+from modules.repositories import CustomerRepository, DailyInfoRepository
 from modules.ai_daily_validator import process_daily_note_evaluation
 from modules.weekly_data_analyzer import compute_weekly_status
 from modules.ai_weekly_writer import generate_weekly_report
@@ -241,52 +243,47 @@ def _batch_evaluate_all(person_entries):
         
         # Get person records from database
         try:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            
-            # Get customer_id first
-            cursor.execute(
-                "SELECT customer_id FROM customers WHERE name = %s LIMIT 1",
-                (entry["person_name"],)
-            )
-            customer_result = cursor.fetchone()
-            
-            if not customer_result:
-                continue
+            with db_query() as cursor:
+                # Get customer_id first
+                cursor.execute(
+                    "SELECT customer_id FROM customers WHERE name = %s LIMIT 1",
+                    (entry["person_name"],)
+                )
+                customer_result = cursor.fetchone()
                 
-            customer_id = customer_result[0]
-            
-            # Get records for this customer
-            cursor.execute(
-                """
-                SELECT record_id, customer_name, date, 
-                       physical_note, cognitive_note, nursing_note, functional_note,
-                       writer_physical, writer_cognitive, writer_nursing, writer_recovery
-                FROM daily_infos 
-                WHERE customer_id = %s
-                ORDER BY date DESC
-                """,
-                (customer_id,)
-            )
-            
-            records = []
-            for row in cursor.fetchall():
-                records.append({
-                    "record_id": row[0],
-                    "customer_name": row[1],
-                    "date": row[2],
-                    "physical_note": row[3],
-                    "cognitive_note": row[4],
-                    "nursing_note": row[5],
-                    "functional_note": row[6],
-                    "writer_physical": row[7],
-                    "writer_cognitive": row[8],
-                    "writer_nursing": row[9],
-                    "writer_recovery": row[10]
-                })
-            
-            cursor.close()
-            conn.close()
+                if not customer_result:
+                    continue
+                    
+                customer_id = customer_result["customer_id"]
+                
+                # Get records for this customer
+                cursor.execute(
+                    """
+                    SELECT record_id, customer_name, date, 
+                           physical_note, cognitive_note, nursing_note, functional_note,
+                           writer_physical, writer_cognitive, writer_nursing, writer_recovery
+                    FROM daily_infos 
+                    WHERE customer_id = %s
+                    ORDER BY date DESC
+                    """,
+                    (customer_id,)
+                )
+                
+                records = []
+                for row in cursor.fetchall():
+                    records.append({
+                        "record_id": row["record_id"],
+                        "customer_name": row["customer_name"],
+                        "date": row["date"],
+                        "physical_note": row["physical_note"],
+                        "cognitive_note": row["cognitive_note"],
+                        "nursing_note": row["nursing_note"],
+                        "functional_note": row["functional_note"],
+                        "writer_physical": row["writer_physical"],
+                        "writer_cognitive": row["writer_cognitive"],
+                        "writer_nursing": row["writer_nursing"],
+                        "writer_recovery": row["writer_recovery"]
+                    })
             
             # Evaluate all records for this person using process_daily_note_evaluation
             for record in records:
@@ -307,8 +304,7 @@ def _batch_evaluate_all(person_entries):
                         note_writer_user_id=note_writer_id,
                         writer=category_writer or "",
                         customer_name=record.get("customer_name", ""),
-                        date=record.get("date", ""),
-                        db_conn=get_db_connection()
+                        date=record.get("date", "")
                     )
             
         except Exception as e:
@@ -769,13 +765,6 @@ with main_tab2:
             progress_bar = st.progress(0)
             status_text = st.empty()
             total = len(person_records)
-            
-            # Get database connection
-            db_conn = get_db_connection()
-            if not db_conn:
-                st.error("데이터베이스 연결에 실패했습니다.")
-                st.stop()
-
 
             # Use the new evaluate_parsed_person method for in-memory data
             eval_results = {}
@@ -796,14 +785,13 @@ with main_tab2:
                     continue
                 
                 # Get record_id from database
-                cursor = db_conn.cursor()
-                cursor.execute(
-                    "SELECT record_id FROM daily_infos WHERE customer_id=%s AND date=%s LIMIT 1",
-                    (customer_id, date)
-                )
-                db_record = cursor.fetchone()
-                record_id = db_record[0] if db_record else None
-                cursor.close()
+                with db_query() as cursor:
+                    cursor.execute(
+                        "SELECT record_id FROM daily_infos WHERE customer_id=%s AND date=%s LIMIT 1",
+                        (customer_id, date)
+                    )
+                    db_record = cursor.fetchone()
+                    record_id = db_record["record_id"] if db_record else None
                 
                 if not record_id:
                     st.warning(f"{date} 기록을 DB에서 찾을 수 없습니다. 건너뜁니다.")
@@ -830,8 +818,7 @@ with main_tab2:
                         note_writer_user_id=note_writer_id,
                         writer=category_writer or writer,
                         customer_name=record.get("customer_name", ""),
-                        date=date,
-                        db_conn=db_conn
+                        date=date
                     )
                     
                     if result and result["evaluation"]:
@@ -860,10 +847,6 @@ with main_tab2:
             progress_bar.progress(1.0)
             status_text.text("✅ 분석 완료!")
             st.success("모든 평가가 완료되었습니다!")
-            
-            # Close database connection
-            if db_conn:
-                db_conn.close()
             
             st.rerun()
 
