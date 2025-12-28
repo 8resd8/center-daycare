@@ -15,9 +15,22 @@ class CareRecordParser:
         self.pdf_file = pdf_file
         self.parsed_data = []
         self.appendix_notes = {}
-        self._debug = os.getenv("PARSER_DEBUG") == "1"
+        self._debug = True  # 강제로 디버그 활성화
+        self._debug_customer = None  # 특정 고객만 디버그
         self._basic_info = {}
         self._personal_info = {}
+    
+    def _should_debug(self):
+        """강순례 고객에 대해서만 디버그 출력"""
+        if not self._debug:
+            return False
+        # 개인정보에서 고객 이름 확인
+        customer_name = self._personal_info.get('customer_name', '')
+        if customer_name == '강순례':
+            return True
+        # 기본정보에서도 확인
+        basic_name = self._basic_info.get('name', '')
+        return basic_name == '강순례'
 
     def _normalize_text(self, text):
         s = str(text).replace("\n", "").replace(" ", "")
@@ -79,6 +92,9 @@ class CareRecordParser:
         with pdfplumber.open(self.pdf_file) as pdf:
             pages = pdf.pages
             page_groups = self._split_page_groups(pages)
+            
+            # Customer-level appendix notes accumulation
+            customer_appendix_notes = {}
 
             for group_pages in page_groups:
                 if not group_pages:
@@ -94,8 +110,23 @@ class CareRecordParser:
                 for page in group_pages:
                     self._parse_page(page)
 
+                # Store appendix notes at customer level
+                customer_name = self._personal_info.get('customer_name', '')
+                if customer_name:
+                    if customer_name not in customer_appendix_notes:
+                        customer_appendix_notes[customer_name] = {}
+                    
+                    # Merge this group's appendix notes
+                    for date, notes in self.appendix_notes.items():
+                        if date not in customer_appendix_notes[customer_name]:
+                            customer_appendix_notes[customer_name][date] = {}
+                        customer_appendix_notes[customer_name][date].update(notes)
+
                 self._merge_appendix_to_main()
                 final_records.extend(self.parsed_data)
+            
+            # Final pass: merge all customer appendix notes
+            self._merge_all_customer_appendices(final_records, customer_appendix_notes)
 
         self.parsed_data = final_records
         return self.parsed_data
@@ -119,8 +150,30 @@ class CareRecordParser:
                 "장기요양급여제공기록지" in normalized
                 or "노인장기요양보험법시행규칙" in normalized
             )
+            
+            # Check if this is an appendix page (has date/content table)
+            is_appendix_page = False
+            if "날짜" in text and "내용" in text:
+                # Check for date patterns like 2025.12.02
+                if re.search(r'2025\.\d{2}\.\d{2}', text):
+                    is_appendix_page = True
+            
+            # Also check if this page contains a customer name without being a header
+            # This helps keep appendix pages with their main records
+            has_customer_name = bool(re.search(r"수급자명\s+([^\s]+)", text))
+            
+            # If it's a new header OR has a different customer name, start a new group
+            # But DON'T start a new group if it's an appendix page
+            should_start_new_group = is_header
+            if current_group and has_customer_name and not is_appendix_page:
+                # Check if this is the same customer as current group
+                current_name = self._parse_personal_info(current_group).get('customer_name', '')
+                new_name = re.search(r"수급자명\s+([^\s]+)", text)
+                new_name = new_name.group(1) if new_name else ''
+                if new_name and current_name and new_name != current_name:
+                    should_start_new_group = True
 
-            if is_header:
+            if should_start_new_group:
                 if current_group:
                     groups.append(current_group)
                 current_group = [page]
@@ -190,7 +243,7 @@ class CareRecordParser:
                             category = header["type"]
 
                 # 디버깅용 출력
-                if self._debug:
+                if self._should_debug():
                     print(f"[PARSER_DEBUG] Appendix Table Found. Cat: {category}, Rows: {len(table_data)}")
 
                 self._parse_appendix_table(table_data, category)
@@ -201,13 +254,22 @@ class CareRecordParser:
             if idx["date"] == -1: continue # 날짜 행이 없으면 스킵
 
             date_row = table_data[idx["date"]]
+            
+            if self._should_debug():
+                print(f"[DEBUG] Main table date row: {[str(d) for d in date_row]}")
 
+            extracted_dates = []
             for col_idx in range(len(date_row)):
                 raw_date = date_row[col_idx]
                 if not raw_date or "월/일" in str(raw_date): continue
 
                 current_date = self._clean_date(raw_date)
                 if not current_date: continue
+                
+                extracted_dates.append(current_date)
+                
+                if self._should_debug():
+                    print(f"[DEBUG] Extracted date: {current_date} from raw: {raw_date}")
 
                 customer_name = self._personal_info.get("customer_name") or self._extract_customer_name(table_data)
 
@@ -350,6 +412,10 @@ class CareRecordParser:
                 if idx["writer_func"] != -1: record["writer_func"] = self._get_cell(table_data, idx["writer_func"], col_idx)
 
                 self.parsed_data.append(record)
+            
+            if self._should_debug():
+                print(f"[DEBUG] Total dates extracted from main table: {extracted_dates}")
+                print(f"[DEBUG] Total records created: {len(self.parsed_data)}")
 
     def _parse_appendix_table(self, table, category):
         """
@@ -358,25 +424,59 @@ class CareRecordParser:
         """
         last_seen_date = None
 
+        if self._should_debug():
+            print(f"[DEBUG] Parsing appendix table for category: {category}")
+            print(f"[DEBUG] Table has {len(table)} rows")
+            # Print first few rows to understand structure
+            for i, row in enumerate(table[:3]):
+                print(f"[DEBUG] Row {i}: {len(row)} cols - {[str(c)[:30] for c in row]}")
+
         for row in table:
             try:
-                # 첫 번째 열과 두 번째 열 가져오기
-                if len(row) < 2: continue
-                col1, col2 = row[0], row[1]
-
-                raw_date = str(col1).strip() if col1 else ""
-                content = str(col2).strip() if col2 else ""
+                # 더 유연한 파싱: 날짜와 내용을 찾기
+                if len(row) < 2: 
+                    if self._should_debug():
+                        print(f"[DEBUG] Skipping row with only {len(row)} columns")
+                    continue
+                
+                # 모든 셀 확인
+                raw_date = ""
+                content = ""
+                date_found = False
+                
+                # 첫 번째 열이 날짜인지 확인
+                first_cell = str(row[0]).strip() if row[0] else ""
+                if re.match(r'\d{4}[\.-]\d{2}[\.-]\d{2}', first_cell):
+                    raw_date = first_cell
+                    date_found = True
+                    # 내용은 두 번째나 세 번째 열에 있을 수 있음
+                    for i in range(1, len(row)):
+                        if row[i] and str(row[i]).strip():
+                            content = str(row[i]).strip()
+                            break
+                
+                if not date_found:
+                    # 날짜가 없으면 내용만 있는 행일 수 있음
+                    for cell in row:
+                        if cell and str(cell).strip():
+                            content = str(cell).strip()
+                            break
+                    # 이전 날짜 사용
+                    if last_seen_date:
+                        raw_date = last_seen_date
 
                 # 날짜 파싱
                 current_date = None
-                if re.match(r'\d{4}[\.-]\d{2}[\.-]\d{2}', raw_date):
-                    current_date = raw_date.replace(".", "-").strip()
-                    last_seen_date = current_date # 날짜 갱신
-                elif not raw_date and content and last_seen_date:
-                    # 날짜 셀이 병합되어 비어있지만 내용은 있는 경우, 직전 날짜 사용
-                    current_date = last_seen_date
+                if raw_date:
+                    if re.match(r'\d{4}[\.-]\d{2}[\.-]\d{2}', raw_date):
+                        current_date = raw_date.replace(".", "-").strip()
+                        last_seen_date = current_date
+                    else:
+                        current_date = last_seen_date
 
                 if not current_date or not content:
+                    if self._debug and not content:
+                        print(f"[DEBUG] Skipping row - no content found")
                     continue
 
                 # 내용 정제
@@ -391,11 +491,54 @@ class CareRecordParser:
                 else:
                     self.appendix_notes[current_date][category] = clean_content
 
+                if self._should_debug():
+                    print(f"[DEBUG] Appendix: date={current_date}, category={category}, content={clean_content[:50]}...")
+
             except Exception as e:
-                if self._debug: print(f"[PARSER_ERR] Appendix parse error: {e}")
+                if self._should_debug(): print(f"[PARSER_ERR] Appendix parse error: {e}")
                 continue
 
+    def _merge_all_customer_appendices(self, all_records, customer_appendix_notes):
+        """Final pass to merge all appendix notes for each customer across all groups"""
+        mapping = {
+            'phy': ['physical_note'],
+            'nur': ['nursing_note'],
+            'func': ['functional_note', 'prog_enhance_detail'],
+            'cog': ['cognitive_note']
+        }
+        
+        for record in all_records:
+            customer_name = record.get('customer_name', '')
+            if not customer_name or customer_name not in customer_appendix_notes:
+                continue
+                
+            r_date = record['date']
+            if r_date not in customer_appendix_notes[customer_name]:
+                continue
+                
+            day_notes = customer_appendix_notes[customer_name][r_date]
+            
+            if self._should_debug():
+                print(f"[DEBUG] Final merge for {customer_name} on {r_date}")
+                print(f"[DEBUG] Available categories: {list(day_notes.keys())}")
+            
+            # 각 카테고리별로 병합
+            for category, target_fields in mapping.items():
+                note_content = day_notes.get(category)
+                
+                if note_content:
+                    if self._should_debug():
+                        print(f"[DEBUG] Found {category} content: {note_content[:50]}...")
+                    
+                    for field in target_fields:
+                        # 해당 필드에 '별지' 관련 문구가 있으면 덮어쓰기
+                        if self._is_placeholder(record[field]):
+                            if self._should_debug():
+                                print(f"[DEBUG] Replacing {field}: '{record[field]}' -> '{note_content}'")
+                            record[field] = note_content
+
     def _merge_appendix_to_main(self):
+        """Merge appendix notes into main records"""
         # [수정] 'cog' -> 'cognitive_note' 매핑 추가
         mapping = {
             'phy': ['physical_note'],
@@ -404,22 +547,38 @@ class CareRecordParser:
             'cog': ['cognitive_note']
         }
 
+        if self._should_debug():
+            print(f"[DEBUG] Merging appendix notes. Total records: {len(self.parsed_data)}")
+            print(f"[DEBUG] Appendix notes: {self.appendix_notes}")
+
         for record in self.parsed_data:
             r_date = record['date']
 
             # 해당 날짜에 별지 데이터가 있는지 확인
             if r_date in self.appendix_notes:
                 day_notes = self.appendix_notes[r_date] # { 'phy': '...', 'cog': '...' }
+                
+                if self._should_debug():
+                    print(f"[DEBUG] Processing record date: {r_date}")
+                    print(f"[DEBUG] Available categories: {list(day_notes.keys())}")
 
                 # 각 카테고리(phy, nur, func, cog)별로 순회
                 for category, target_fields in mapping.items():
                     note_content = day_notes.get(category)
 
                     if note_content:
+                        if self._should_debug():
+                            print(f"[DEBUG] Found {category} content: {note_content[:50]}...")
+                        
                         for field in target_fields:
                             # 해당 필드에 '별지' 관련 문구가 있으면 덮어쓰기
                             if self._is_placeholder(record[field]):
+                                if self._should_debug():
+                                    print(f"[DEBUG] Replacing {field}: '{record[field]}' -> '{note_content}'")
                                 record[field] = note_content
+                            else:
+                                if self._should_debug():
+                                    print(f"[DEBUG] Field {field} not placeholder: '{record[field]}'")
 
             # 별지 처리 후에도 여전히 '별지첨부'만 남아있는 경우 처리
             all_target_fields = ['physical_note', 'nursing_note', 'functional_note', 'cognitive_note']
