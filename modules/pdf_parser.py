@@ -276,10 +276,14 @@ class CareRecordParser:
 
                 if idx["time"] != -1:
                     val = self._get_cell(table_data, idx["time"], col_idx)
-                    if val and "~" in val:
+                    if val and "~" in val and val.strip() != "":
                         times = val.split("~")
                         record["start_time"] = times[0].strip()
                         record["end_time"] = times[1].strip()
+                    else:
+                        # 시간 데이터가 없으면 헤더의 기본값 대신 공백 설정
+                        record["start_time"] = ""
+                        record["end_time"] = ""
 
                 if idx["hygiene"] != -1: record["hygiene_care"] = self._check_status(self._get_cell(table_data, idx["hygiene"], col_idx))
 
@@ -293,9 +297,25 @@ class CareRecordParser:
                     record["bath_time"] = b_time
                     record["bath_method"] = b_method
 
-                if idx["meal_bk"] != -1: record["meal_breakfast"] = self._get_cell(table_data, idx["meal_bk"], col_idx)
-                if idx["meal_ln"] != -1: record["meal_lunch"] = self._get_cell(table_data, idx["meal_ln"], col_idx)
-                if idx["meal_dn"] != -1: record["meal_dinner"] = self._get_cell(table_data, idx["meal_dn"], col_idx)
+                if idx["meal_bk"] != -1: 
+                    meal_val = self._get_cell(table_data, idx["meal_bk"], col_idx)
+                    # 슬래시만 있는 경우 공백 처리
+                    if meal_val and (meal_val.strip() in ["//", "/"] or re.match(r'^[/\s]+$', meal_val.strip())):
+                        record["meal_breakfast"] = ""
+                    else:
+                        record["meal_breakfast"] = meal_val
+                if idx["meal_ln"] != -1: 
+                    meal_val = self._get_cell(table_data, idx["meal_ln"], col_idx)
+                    if meal_val and (meal_val.strip() in ["//", "/"] or re.match(r'^[/\s]+$', meal_val.strip())):
+                        record["meal_lunch"] = ""
+                    else:
+                        record["meal_lunch"] = meal_val
+                if idx["meal_dn"] != -1: 
+                    meal_val = self._get_cell(table_data, idx["meal_dn"], col_idx)
+                    if meal_val and (meal_val.strip() in ["//", "/"] or re.match(r'^[/\s]+$', meal_val.strip())):
+                        record["meal_dinner"] = ""
+                    else:
+                        record["meal_dinner"] = meal_val
 
                 if idx["excretion"] != -1: record["toilet_care"] = self._get_cell(table_data, idx["excretion"], col_idx)
                 if idx["mobility"] != -1: record["mobility_care"] = self._check_status(self._get_cell(table_data, idx["mobility"], col_idx))
@@ -312,7 +332,12 @@ class CareRecordParser:
                 if idx["prog_cog"] != -1: record["prog_cognitive"] = self._check_status(self._get_cell(table_data, idx["prog_cog"], col_idx))
                 if idx["prog_ther"] != -1: record["prog_therapy"] = self._check_status(self._get_cell(table_data, idx["prog_ther"], col_idx))
                 if idx["prog_detail"] != -1:
-                    record["prog_enhance_detail"] = self._pick_nearby_text(table_data, idx["prog_detail"], col_idx, window=8)
+                    # 먼저 해당 셀의 실제 값을 확인
+                    cell_value = self._get_cell(table_data, idx["prog_detail"], col_idx)
+                    if cell_value and cell_value.strip() and cell_value.strip() != "-":
+                        record["prog_enhance_detail"] = self._pick_nearby_text(table_data, idx["prog_detail"], col_idx, window=8)
+                    else:
+                        record["prog_enhance_detail"] = ""
 
                 if idx["note_phy"] != -1: record["physical_note"] = self._get_cell(table_data, idx["note_phy"], col_idx)
                 if idx["note_cog"] != -1: record["cognitive_note"] = self._get_cell(table_data, idx["note_cog"], col_idx)

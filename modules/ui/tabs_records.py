@@ -51,7 +51,7 @@ def render_records_tab():
                 "특이사항": r.get('physical_note'),
                 "세면/구강": r.get('hygiene_care'),
                 "목욕": r.get('bath_time') if r.get('bath_time') == "없음" else f"{r.get('bath_time')} / {r.get('bath_method')}",
-                "식사": f"{r.get('meal_breakfast')}/{r.get('meal_lunch')}/{r.get('meal_dinner')}",
+                "식사": f"{r.get('meal_breakfast') or ''}{r.get('meal_lunch') and ('/' + r.get('meal_lunch')) or ''}{r.get('meal_dinner') and ('/' + r.get('meal_dinner')) or ''}",
                 "화장실이용하기(기저귀교환)": r.get('toilet_care'),
                 "이동": r.get('mobility_care'),
                 "작성자": r.get('writer_phy')
