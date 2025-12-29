@@ -28,7 +28,7 @@ def render_sidebar():
 
         # 1. 파일 업로드 섹션
         uploaded_files = st.file_uploader(
-            "PDF 기록지 업로드",
+            "장기요양급여 제공기록지 PDF 업로드",
             type=["pdf"],
             accept_multiple_files=True,
             key="pdf_uploader"
