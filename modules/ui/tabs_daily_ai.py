@@ -22,8 +22,207 @@ def render_ai_evaluation_tab():
     else:
         st.markdown(f"### 📊 기록 품질 전수 조사 - {person_name or active_doc['name']}")
 
+        # 필수 항목 체크 섹션
         st.divider()
-        st.write("### 📝 새로운 평가 실행")
+        
+        def check_required_items(records):
+            """필수 항목 체크 함수"""
+            results = []
+            
+            for record in records:
+                date = record.get("date", "")
+                
+                # "미이용", "결석", "일정없음"인 경우 모든 항목을 "해당없음"으로 처리
+                # total_service_time 필드에서 상태 확인
+                total_service = record.get("total_service_time", "").strip()
+                is_absent = total_service in ["미이용", "결석", "일정없음"]
+                
+                # 종료시간 확인
+                end_time = record.get("end_time", "")
+                is_afternoon = False
+                
+                if end_time:
+                    try:
+                        # 시간 파싱 (예: "14:30")
+                        hour_min = end_time.split(":")
+                        if len(hour_min) >= 2:
+                            hour = int(hour_min[0])
+                            is_afternoon = hour >= 15
+                    except:
+                        pass
+                
+                # 작성 필수 항목 체크
+                if is_absent:
+                    # 모든 항목을 None으로 설정 (해당없음 표시)
+                    checks = {
+                        "날짜": date,
+                        "총시간": None,
+                        "시작시간": None,
+                        "종료시간": None,
+                        "이동서비스": None,
+                    }
+                else:
+                    checks = {
+                        "날짜": date,
+                        "총시간": bool(record.get("total_service_time", "")),
+                        "시작시간": bool(record.get("start_time", "")),
+                        "종료시간": bool(end_time),
+                        "이동서비스": bool(record.get("transport_service", "")),
+                    }
+                
+                # 신체활동지원
+                if is_absent:
+                    physical_checks = {
+                        "날짜": date,
+                        "청결": None,
+                        "점심": None,
+                        "저녁": None,
+                        "화장실": None,
+                        "이동도움": None,
+                        "특이사항": None
+                    }
+                else:
+                    physical_checks = {
+                        "날짜": date,
+                        "청결": bool(record.get("hygiene_care", "")),
+                        "점심": bool(record.get("meal_lunch", "")),
+                        "저녁": bool(record.get("meal_dinner", "")) if is_afternoon else None,  # 15시 이후만 체크
+                        "화장실": bool(record.get("toilet_care", "")),
+                        "이동도움": bool(record.get("mobility_care", "")),
+                        "특이사항": bool(record.get("physical_note", ""))
+                    }
+                
+                # 인지관리
+                if is_absent:
+                    cognitive_checks = {
+                        "날짜": date,
+                        "인지관리": None,
+                        "의사소통": None,
+                        "특이사항": None
+                    }
+                else:
+                    cognitive_checks = {
+                        "날짜": date,
+                        "인지관리": bool(record.get("cog_support", "")),
+                        "의사소통": bool(record.get("comm_support", "")),
+                        "특이사항": bool(record.get("cognitive_note", ""))
+                    }
+                
+                # 건강및간호관리
+                if is_absent:
+                    health_checks = {
+                        "날짜": date,
+                        "혈압/체온": None,
+                        "건강관리": None,
+                        "특이사항": None
+                    }
+                else:
+                    health_checks = {
+                        "날짜": date,
+                        "혈압/체온": bool(record.get("bp_temp", "")),
+                        "건강관리": bool(record.get("health_manage", "")),
+                        "특이사항": bool(record.get("nursing_note", ""))
+                    }
+                
+                # 기능회복훈련
+                if is_absent:
+                    recovery_checks = {
+                        "날짜": date,
+                        "기본동작훈련": None,
+                        "일상생활훈련": None,
+                        "인지활동프로그램": None,
+                        "인지기능향상": None,
+                        "특이사항": None
+                    }
+                else:
+                    recovery_checks = {
+                        "날짜": date,
+                        "기본동작훈련": bool(record.get("prog_basic", "")),
+                        "일상생활훈련": bool(record.get("prog_activity", "")),
+                        "인지활동프로그램": bool(record.get("prog_cognitive", "")),
+                        "인지기능향상": bool(record.get("prog_therapy", "")),
+                        "특이사항": bool(record.get("functional_note", ""))
+                    }
+                
+                results.append({
+                    "기본정보": checks,
+                    "신체활동지원": physical_checks,
+                    "인지관리": cognitive_checks,
+                    "건강및간호관리": health_checks,
+                    "기능회복훈련": recovery_checks
+                })
+            
+            return results
+        
+        # 필수 항목 체크 실행
+        check_results = check_required_items(person_records)
+        
+        if check_results:
+            # 카테고리별 작성률 계산
+            def calculate_completion_rate(results, category):
+                """카테고리별 작성률 계산"""
+                total_required = 0
+                total_completed = 0
+                
+                for result in results:
+                    checks = result[category]
+                    for key, value in checks.items():
+                        if key != "날짜" and value is not None:  # 해당없음 제외
+                            total_required += 1
+                            if value:
+                                total_completed += 1
+                
+                if total_required == 0:
+                    return 0, 0, 0
+                
+                percentage = (total_completed / total_required) * 100
+                return percentage, total_completed, total_required
+            
+            # 작성률 표시
+            st.write("#### 카테고리별 작성률")
+            categories_korean = ["기본정보", "신체활동지원", "인지관리", "건강및간호관리", "기능회복훈련"]
+            categories = ["기본정보", "신체활동지원", "인지관리", "건강및간호관리", "기능회복훈련"]
+            
+            rate_cols = st.columns(5)
+            for idx, (col, cat_ko, cat) in enumerate(zip(rate_cols, categories_korean, categories)):
+                percentage, completed, total = calculate_completion_rate(check_results, cat)
+                with col:
+                    st.metric(
+                        label=cat_ko,
+                        value=f"{percentage:.1f}%",
+                        delta=f"{completed}/{total}"
+                    )
+            
+            # 카테고리별 탭으로 표시
+            category_tabs = st.tabs(categories_korean)
+            
+            for idx, category in enumerate(categories):
+                with category_tabs[idx]:
+                    # 테이블 생성
+                    table_data = []
+                    for result in check_results:
+                        checks = result[category]
+                        row = {"날짜": checks.get("날짜", "")}
+                        
+                        for key, value in checks.items():
+                            if key != "날짜":
+                                if value is None:
+                                    row[key] = "해당없음"
+                                elif value:
+                                    row[key] = "✅"
+                                else:
+                                    row[key] = "❌"
+                        
+                        table_data.append(row)
+                    
+                    if table_data:
+                        df = pd.DataFrame(table_data)
+                        st.dataframe(df, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("데이터가 없습니다.")
+
+        st.divider()
+        st.write("### 📝 특이사항 AI 평가 실행")
 
         grade_filter_new = st.selectbox(
             "등급 필터",
