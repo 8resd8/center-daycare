@@ -11,6 +11,7 @@ from modules.customers import resolve_customer_id
 from modules.weekly_data_analyzer import compute_weekly_status
 from modules.services.weekly_report_service import report_service
 from modules.ui.ui_helpers import get_active_doc, get_active_person_records
+from modules.utils.enums import CategoryDisplay, RequiredFields, WriterFields, WeeklyDisplayFields
 
 
 def render_records_tab():
@@ -30,18 +31,12 @@ def render_records_tab():
 
         st.markdown(f"### 👤 대상자: **{customer_name}** 어르신")
 
-        sub_tab_basic, sub_tab1, sub_tab2, sub_tab3, sub_tab4 = st.tabs([
-            "ℹ️ 기본 정보", "💪 신체활동지원", "🧠 인지관리", "🩺 간호관리", "🏃 기능회복"
-        ])
+        sub_tab_basic, sub_tab1, sub_tab2, sub_tab3, sub_tab4 = st.tabs(CategoryDisplay.WEEKLY_DISPLAY_NAMES)
 
         with sub_tab_basic:
             df_basic = pd.DataFrame([{
-                "날짜": r.get('date'),
-                "총시간": r.get('total_service_time', "-"),
-                "시작시간": r.get('start_time') or "-",
-                "종료시간": r.get('end_time') or "-",
-                "이동서비스": r.get('transport_service', "미제공"),
-                "차량번호": r.get('transport_vehicles', "")
+                display_name: r.get(field_name, "-" if field_name != "transport_service" else "미제공")
+                for display_name, field_name in WeeklyDisplayFields.BASIC_INFO_DISPLAY.items()
             } for r in data])
             st.dataframe(df_basic, use_container_width=True, hide_index=True)
 
@@ -60,36 +55,22 @@ def render_records_tab():
 
         with sub_tab2:
             df_cog = pd.DataFrame([{
-                "날짜": r.get('date'),
-                "특이사항": r.get('cognitive_note'),
-                "인지관리지원": r.get('cog_support'),
-                "의사소통도움": r.get('comm_support'),
-                "작성자": r.get('writer_cog')
+                display_name: r.get(field_name)
+                for display_name, field_name in WeeklyDisplayFields.COGNITIVE_CARE_DISPLAY.items()
             } for r in data])
             st.dataframe(df_cog, use_container_width=True, hide_index=True)
 
         with sub_tab3:
             df_nur = pd.DataFrame([{
-                "날짜": r.get('date'),
-                "특이사항": r.get('nursing_note'),
-                "혈압/체온": r.get('bp_temp'),
-                "건강관리(5분)": r.get('health_manage'),
-                "간호관리": r.get('nursing_manage'),
-                "응급서비스": r.get('emergency'),
-                "작성자": r.get('writer_nur')
+                display_name: r.get(field_name)
+                for display_name, field_name in WeeklyDisplayFields.NURSING_CARE_DISPLAY.items()
             } for r in data])
             st.dataframe(df_nur, use_container_width=True, hide_index=True)
 
         with sub_tab4:
             df_func = pd.DataFrame([{
-                "날짜": r.get('date'),
-                "특이사항": r.get('functional_note'),
-                "향상 프로그램 내용": r.get('prog_enhance_detail'),
-                "향상 프로그램 여부": r.get('prog_basic'),
-                "인지활동 프로그램": r.get('prog_activity'),
-                "인지기능 훈련": r.get('prog_cognitive'),
-                "물리치료": r.get('prog_therapy'),
-                "작성자": r.get('writer_func')
+                display_name: r.get(field_name)
+                for display_name, field_name in WeeklyDisplayFields.FUNCTIONAL_RECOVERY_DISPLAY.items()
             } for r in data])
             st.dataframe(df_func, use_container_width=True, hide_index=True)
 

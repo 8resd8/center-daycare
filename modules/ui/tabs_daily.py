@@ -7,6 +7,8 @@ from modules.customers import resolve_customer_id
 from modules.db_connection import db_query
 from modules.services.daily_report_service import evaluation_service
 from modules.ui.ui_helpers import get_active_doc, get_active_person_records
+from modules.repositories.ai_evaluation import AiEvaluationRepository
+from modules.utils.enums import CategoryType, CategoryDisplay, RequiredFields, WriterFields
 
 
 def render_ai_evaluation_tab():
@@ -146,11 +148,11 @@ def render_ai_evaluation_tab():
                     }
                 
                 results.append({
-                    "기본정보": checks,
-                    "신체활동지원": physical_checks,
-                    "인지관리": cognitive_checks,
-                    "건강및간호관리": health_checks,
-                    "기능회복훈련": recovery_checks
+                    CategoryType.BASIC_INFO.value: checks,
+                    CategoryType.PHYSICAL_ACTIVITY.value: physical_checks,
+                    CategoryType.COGNITIVE_CARE.value: cognitive_checks,
+                    CategoryType.NURSING_CARE.value: health_checks,
+                    CategoryType.FUNCTIONAL_RECOVERY.value: recovery_checks
                 })
             
             return results
@@ -181,8 +183,8 @@ def render_ai_evaluation_tab():
 
             # 작성률 표시
             st.write("#### 카테고리별 작성률")
-            categories_korean = ["기본정보", "신체활동지원", "인지관리", "건강및간호관리", "기능회복훈련"]
-            categories = ["기본정보", "신체활동지원", "인지관리", "건강및간호관리", "기능회복훈련"]
+            categories_korean = CategoryDisplay.KOREAN_NAMES
+            categories = CategoryDisplay.KOREAN_NAMES
 
             rate_cols = st.columns(5)
             for idx, (col, cat_ko, cat) in enumerate(zip(rate_cols, categories_korean, categories)):
@@ -212,18 +214,12 @@ def render_ai_evaluation_tab():
                         # 작성자 정보 추가
                         original_record = next((r for r in person_records if r["date"] == checks.get("날짜", "")), {})
                         
-                        if category == "기본정보":
-                            writers = [original_record.get("writer_phy"), original_record.get("writer_nur"), 
-                                      original_record.get("writer_cog"), original_record.get("writer_func")]
+                        if category == CategoryType.BASIC_INFO.value:
+                            writers = [original_record.get(field) for field in WriterFields.WRITER_MAPPING[category]]
                             row["작성자"] = next((w for w in writers if w), "")
-                        elif category == "신체활동지원":
-                            row["작성자"] = original_record.get("writer_phy") or ""
-                        elif category == "인지관리":
-                            row["작성자"] = original_record.get("writer_cog") or ""
-                        elif category == "건강및간호관리":
-                            row["작성자"] = original_record.get("writer_nur") or ""
-                        elif category == "기능회복훈련":
-                            row["작성자"] = original_record.get("writer_func") or ""
+                        else:
+                            writer_field = WriterFields.WRITER_MAPPING[category][0]
+                            row["작성자"] = original_record.get(writer_field) or ""
 
                         for key, value in checks.items():
                             if key != "날짜":
