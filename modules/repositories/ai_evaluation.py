@@ -15,27 +15,42 @@ class AiEvaluationRepository(BaseRepository):
             "PHYSICAL": "신체",
             "COGNITIVE": "인지", 
             "NURSING": "간호",
-            "RECOVERY": "기능"
+            "RECOVERY": "기능",
+            "SPECIAL_NOTE_PHYSICAL": "특이사항(신체)",
+            "SPECIAL_NOTE_COGNITIVE": "특이사항(인지)"
         }
         korean_category = category_map.get(category, category)
         
         if evaluation_result:
-            content_quality_score = evaluation_result.get('consistency_score', 0)
-            specificity_score = evaluation_result.get('specificity_score', 0)
-            professionalism_score = evaluation_result.get('grammar_score', 0)
+            # 특이사항 평가인지 확인
+            is_special_note = category.startswith("SPECIAL_NOTE_")
             
-            # 점수 기반 등급 계산
-            average_score = (content_quality_score + specificity_score + professionalism_score) / 3
-            
-            if average_score >= 70:
-                korean_grade = '우수'
-            elif average_score >= 55:
-                korean_grade = '평균'
+            if is_special_note:
+                # 특이사항 평가는 점수가 없음
+                content_quality_score = 0
+                specificity_score = 0
+                professionalism_score = 0
+                korean_grade = '개선'  # 특이사항은 항상 개선 필요으로 표시
+                reason_text = evaluation_result.get('reason', '')
+                suggestion_text = evaluation_result.get('corrected_note', '')
             else:
-                korean_grade = '개선'
-            
-            reason_text = evaluation_result.get('reasoning_process')
-            suggestion_text = evaluation_result.get('suggestion_text')
+                # 일반 평가는 점수 기반
+                content_quality_score = evaluation_result.get('consistency_score', 0)
+                specificity_score = evaluation_result.get('specificity_score', 0)
+                professionalism_score = evaluation_result.get('grammar_score', 0)
+                
+                # 점수 기반 등급 계산
+                average_score = (content_quality_score + specificity_score + professionalism_score) / 3
+                
+                if average_score >= 70:
+                    korean_grade = '우수'
+                elif average_score >= 55:
+                    korean_grade = '평균'
+                else:
+                    korean_grade = '개선'
+                
+                reason_text = evaluation_result.get('reasoning_process')
+                suggestion_text = evaluation_result.get('suggestion_text')
         else:
             # "특이사항 없음" 또는 빈 노트의 경우
             content_quality_score = 0

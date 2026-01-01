@@ -2,7 +2,7 @@
 
 import json
 from typing import Dict, Optional, Any
-from modules.clients.daily_prompt import get_evaluation_prompt
+from modules.clients.daily_prompt import get_special_note_prompt
 from modules.repositories import AiEvaluationRepository
 from modules.clients.ai_client import get_ai_client
 
@@ -13,21 +13,21 @@ class EvaluationService:
     def __init__(self):
         self.ai_eval_repo = AiEvaluationRepository()
     
-    def evaluate_note_with_ai(self, note_text: str, category: str = '', writer: str = '', 
-                            customer_name: str = '', date: str = '') -> Optional[Dict]:
-        """AI를 사용하여 기록 평가
+        
+    def evaluate_special_note_with_ai(self, physical_note: str, cognitive_note: str, 
+                                    customer_name: str, date: str) -> Optional[Dict]:
+        """XML 형식으로 특이사항 평가
         
         Args:
-            note_text: 평가할 텍스트
-            category: 카테고리 (PHYSICAL, COGNITIVE, NURSING, RECOVERY)
-            writer: 작성자
+            physical_note: 신체활동 특이사항
+            cognitive_note: 인지관리 특이사항
             customer_name: 고객명
             date: 날짜
             
         Returns:
             평가 결과 딕셔너리 또는 None
         """
-        if not note_text or note_text.strip() in ['특이사항 없음', '결석']:
+        if not physical_note and not cognitive_note:
             return None
         
         try:
@@ -36,7 +36,9 @@ class EvaluationService:
             print(f'AI 클라이언트 초기화 오류: {e}')
             return None
         
-        system_prompt, user_prompt = get_evaluation_prompt(note_text, category, writer, customer_name, date)
+        system_prompt, user_prompt = get_special_note_prompt(
+            physical_note, cognitive_note, customer_name, date
+        )
         
         try:
             response = ai_client.chat_completion(
@@ -45,14 +47,21 @@ class EvaluationService:
                     {'role': 'system', 'content': system_prompt},
                     {'role': 'user', 'content': user_prompt}
                 ],
-                temperature=0.7,
-                response_format={'type': 'json_object'}
+                temperature=0.3
             )
             
-            result = json.loads(response.choices[0].message.content)
+            # JSON 응답 파싱
+            content = response.choices[0].message.content
+            # 코드 블록 제거
+            if content.startswith('```json'):
+                content = content[7:-3].strip()
+            elif content.startswith('```'):
+                content = content[3:-3].strip()
+            
+            result = json.loads(content)
             return result
         except Exception as e:
-            print(f'AI 평가 중 오류 발생: {e}')
+            print(f'특이사항 AI 평가 중 오류 발생: {e}')
             return None
     
     def calculate_grade(self, evaluation_result: Dict) -> str:
