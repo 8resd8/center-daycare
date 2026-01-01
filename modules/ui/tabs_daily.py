@@ -8,7 +8,7 @@ from modules.db_connection import db_query
 from modules.services.daily_report_service import evaluation_service
 from modules.ui.ui_helpers import get_active_doc, get_active_person_records
 from modules.repositories.ai_evaluation import AiEvaluationRepository
-from modules.utils.enums import CategoryType, CategoryDisplay, RequiredFields, WriterFields
+from modules.utils.enums import CategoryType, CategoryDisplay, RequiredFields, WriterFields, OptionalFields
 
 
 def render_ai_evaluation_tab():
@@ -63,6 +63,7 @@ def render_ai_evaluation_tab():
                         "시작시간": None,
                         "종료시간": None,
                         "이동서비스": None,
+                        "차량번호": None,
                     }
                 else:
                     checks = {
@@ -71,6 +72,7 @@ def render_ai_evaluation_tab():
                         "시작시간": bool(record.get("start_time", "")),
                         "종료시간": bool(end_time),
                         "이동서비스": bool(record.get("transport_service", "")),
+                        "차량번호": bool(record.get("transport_vehicles", "")),
                     }
                 
                 # 신체활동지원
@@ -131,7 +133,7 @@ def render_ai_evaluation_tab():
                 if is_absent:
                     recovery_checks = {
                         "날짜": date,
-                        "기본동작훈련": None,
+                        "향상프로그램": None,
                         "일상생활훈련": None,
                         "인지활동프로그램": None,
                         "인지기능향상": None,
@@ -140,7 +142,7 @@ def render_ai_evaluation_tab():
                 else:
                     recovery_checks = {
                         "날짜": date,
-                        "기본동작훈련": bool(record.get("prog_basic", "")),
+                        "향상프로그램": bool(record.get("prog_basic", "")),
                         "일상생활훈련": bool(record.get("prog_activity", "")),
                         "인지활동프로그램": bool(record.get("prog_cognitive", "")),
                         "인지기능향상": bool(record.get("prog_therapy", "")),
@@ -182,7 +184,7 @@ def render_ai_evaluation_tab():
                 return percentage, total_completed, total_required
 
             # 작성률 표시
-            st.write("#### 카테고리별 작성률")
+            st.write("#### 카테고리별 정보")
             categories_korean = CategoryDisplay.KOREAN_NAMES
             categories = CategoryDisplay.KOREAN_NAMES
 
@@ -237,6 +239,83 @@ def render_ai_evaluation_tab():
                         st.dataframe(df, use_container_width=True, hide_index=True)
                     else:
                         st.info("데이터가 없습니다.")
+
+        # 선택적 필드 섹션 (상시 표시)
+        st.divider()
+        st.write("### 추가 정보")
+        
+        # 모든 선택적 필드를 하나로 합치기
+        all_optional_fields = {
+            **OptionalFields.PHYSICAL_ACTIVITY_OPTIONAL,
+            **OptionalFields.NURSING_CARE_OPTIONAL,
+            **OptionalFields.FUNCTIONAL_RECOVERY_OPTIONAL
+        }
+        
+        # 테이블 데이터 생성
+        table_data = []
+        non_default_count = 0
+        total_count = 0
+        
+        for record in person_records:
+            row = {"날짜": record.get("date", "")}
+            
+            # 각 선택적 필드 값 추가
+            for display_name, field_name in all_optional_fields.items():
+                value = record.get(field_name, "-")
+                # 특수 처리가 필요한 필드들
+                if field_name == "bath_time" and value != "-" and record.get("bath_method", "-") != "-":
+                    value = f"{value} / {record.get('bath_method', '-')}"
+                elif field_name == "bath_method" and field_name == "bath_method":
+                    continue  # bath_time에서 이미 처리했으므로 건너뛰기
+                
+                row[display_name] = value
+                
+                # 기본값이 아닌 경우 카운트 (0, 없음 / , -, 미실시 등은 제외)
+                if value not in ['0', '-', '미실시', '없음', '', None, '없음 / ']:
+                    non_default_count += 1
+                total_count += 1
+            
+            table_data.append(row)
+        
+        # 상단에 요약 정보 표시
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            st.markdown(f"<p style='text-align: center; color: gray; margin-bottom: 5px;'>추가 정보 작성 현황</p>", unsafe_allow_html=True)
+            # 1건 이상일 때만 주황색, 아니면 검은색
+            color = 'orange' if non_default_count > 0 else 'black'
+            st.markdown(f"<h3 style='text-align: center; color: {color}; margin: 0px;'>{non_default_count}건</h3>", unsafe_allow_html=True)
+        
+        if table_data:
+            df = pd.DataFrame(table_data)
+            
+            # 기본값이 아닌 셀에 강조 표시 (1건 이상일 때만)
+            def highlight_non_default(val):
+                # 기본값 목록
+                default_values = ['0', '-', '미실시', '없음', '', None, '없음 / ']
+                if val in default_values or non_default_count == 0:
+                    return ''
+                return 'background-color: #ffeb3b; color: #000'  # 노란색 배경
+            
+            # 날짜 열은 제외하고 스타일 적용
+            styled_df = df.style.applymap(
+                highlight_non_default,
+                subset=[col for col in df.columns if col != '날짜']
+            )
+            
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+            
+            # 고객 정보는 별도로 표시
+            st.markdown("---")
+            st.write("**👤 고객 정보**")
+            if person_records:
+                first_record = person_records[0]
+                customer_info_data = []
+                for display_name, field_name in OptionalFields.CUSTOMER_INFO.items():
+                    value = first_record.get(field_name, "-")
+                    customer_info_data.append({"항목": display_name, "값": value})
+                
+                df_customer = pd.DataFrame(customer_info_data)
+                st.dataframe(df_customer, use_container_width=True, hide_index=True)
 
         st.divider()
         st.write("### 📝 특이사항 AI 평가 실행")

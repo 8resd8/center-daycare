@@ -39,7 +39,8 @@ class RequiredFields:
         "총시간": "total_service_time",
         "시작시간": "start_time",
         "종료시간": "end_time",
-        "이동서비스": "transport_service"
+        "이동서비스": "transport_service",
+        "차량번호": "transport_vehicles"
     }
     
     # 신체활동지원 필드
@@ -68,7 +69,7 @@ class RequiredFields:
     
     # 기능회복 필드
     FUNCTIONAL_RECOVERY_FIELDS = {
-        "기본동작훈련": "prog_basic",
+        "향상프로그램": "prog_basic",
         "일상생활훈련": "prog_activity",
         "인지활동프로그램": "prog_cognitive",
         "인지기능향상": "prog_therapy",
@@ -84,6 +85,52 @@ class WriterFields:
         CategoryType.COGNITIVE_CARE.value: ["writer_cog"],
         CategoryType.NURSING_CARE.value: ["writer_nur"],
         CategoryType.FUNCTIONAL_RECOVERY.value: ["writer_func"]
+    }
+
+
+class OptionalFields:
+    """선택적 필드명 정의 (필수 항목 외 나머지 모든 필드)"""
+    # 기본정보 선택적 필드
+    BASIC_INFO_OPTIONAL = {}  # 차량번호는 필수 항목으로 이동
+    
+    # 신체활동지원 선택적 필드
+    PHYSICAL_ACTIVITY_OPTIONAL = {
+        "목욕 시간": "bath_time",
+        "목욕 방법": "bath_method",
+        "아침": "meal_breakfast"
+    }
+    
+    # 인지관리 선택적 필드 (없음, 모두 필수)
+    COGNITIVE_CARE_OPTIONAL = {}
+    
+    # 간호관리 선택적 필드
+    NURSING_CARE_OPTIONAL = {
+        "간호관리": "nursing_manage",
+        "응급서비스": "emergency"
+    }
+    
+    # 기능회복 선택적 필드
+    FUNCTIONAL_RECOVERY_OPTIONAL = {
+        "물리치료": "prog_therapy"
+    }
+    
+    # 고객 정보 필드
+    CUSTOMER_INFO = {
+        "생년월일": "customer_birth_date",
+        "요양등급": "customer_grade",
+        "인식번호": "customer_recognition_no",
+        "시설명": "facility_name",
+        "시설코드": "facility_code"
+    }
+    
+    # 모든 선택적 필드를 하나로 모음
+    ALL_OPTIONAL_FIELDS = {
+        **BASIC_INFO_OPTIONAL,
+        **PHYSICAL_ACTIVITY_OPTIONAL,
+        **COGNITIVE_CARE_OPTIONAL,
+        **NURSING_CARE_OPTIONAL,
+        **FUNCTIONAL_RECOVERY_OPTIONAL,
+        **CUSTOMER_INFO
     }
 
 
