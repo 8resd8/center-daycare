@@ -1,10 +1,13 @@
 """AI 평가 서비스 - 일일 기록 평가 비즈니스 로직"""
 
 import json
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 from modules.clients.daily_prompt import get_special_note_prompt
 from modules.repositories import AiEvaluationRepository
 from modules.clients.ai_client import get_ai_client
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 
 
 class EvaluationService:
@@ -14,19 +17,22 @@ class EvaluationService:
         self.ai_eval_repo = AiEvaluationRepository()
     
         
-    def evaluate_special_note_with_ai(self, physical_note: str, cognitive_note: str, 
-                                    customer_name: str, date: str) -> Optional[Dict]:
+    def evaluate_special_note_with_ai(self, record: dict, previous_sentences: List[str] = None) -> Optional[Dict]:
         """XML 형식으로 특이사항 평가
         
         Args:
-            physical_note: 신체활동 특이사항
-            cognitive_note: 인지관리 특이사항
-            customer_name: 고객명
-            date: 날짜
+            record: 전체 기록 딕셔너리
+            previous_sentences: 이전에 생성된 문장 리스트 (중복 방지용)
             
         Returns:
             평가 결과 딕셔너리 또는 None
         """
+        if previous_sentences is None:
+            previous_sentences = []
+            
+        physical_note = record.get('physical_note', '')
+        cognitive_note = record.get('cognitive_note', '')
+        
         if not physical_note and not cognitive_note:
             return None
         
@@ -36,9 +42,17 @@ class EvaluationService:
             print(f'AI 클라이언트 초기화 오류: {e}')
             return None
         
-        system_prompt, user_prompt = get_special_note_prompt(
-            physical_note, cognitive_note, customer_name, date
-        )
+        system_prompt, user_prompt = get_special_note_prompt(record)
+        
+        # 디버그 출력
+        print("=" * 50)
+        print("DEBUG: 프롬프트 내용")
+        print("=" * 50)
+        print("SYSTEM PROMPT:")
+        print(system_prompt)
+        print("\nUSER PROMPT:")
+        print(user_prompt)
+        print("=" * 50)
         
         try:
             response = ai_client.chat_completion(
@@ -47,7 +61,7 @@ class EvaluationService:
                     {'role': 'system', 'content': system_prompt},
                     {'role': 'user', 'content': user_prompt}
                 ],
-                temperature=0.3
+                temperature=0.7
             )
             
             # JSON 응답 파싱
@@ -59,10 +73,77 @@ class EvaluationService:
                 content = content[3:-3].strip()
             
             result = json.loads(content)
+            
+            # 3개 후보 중에서 가장 유사도가 낮은 문장 선택
+            result = self._select_most_unique_sentences(result, previous_sentences)
+            
             return result
         except Exception as e:
             print(f'특이사항 AI 평가 중 오류 발생: {e}')
             return None
+    
+    def _select_most_unique_sentences(self, result: Dict, previous_sentences: List[str]) -> Dict:
+        """3개 후보 중에서 이전 문장들과 가장 유사도가 낮은 문장 선택"""
+        if not previous_sentences:
+            # 이전 문장이 없으면 첫 번째 후보 선택
+            return {
+                "physical": result["physical_candidates"][0],
+                "cognitive": result["cognitive_candidates"][0]
+            }
+        
+        # TF-IDF 벡터라이저 초기화
+        vectorizer = TfidfVectorizer()
+        
+        # physical 후보 중 가장 유사도 낮은 것 선택
+        physical_sentences = [candidate["corrected_note"] for candidate in result["physical_candidates"]]
+        physical_selected = self._find_least_similar(
+            physical_sentences, previous_sentences, vectorizer
+        )
+        
+        # cognitive 후보 중 가장 유사도 낮은 것 선택
+        cognitive_sentences = [candidate["corrected_note"] for candidate in result["cognitive_candidates"]]
+        cognitive_selected = self._find_least_similar(
+            cognitive_sentences, previous_sentences, vectorizer
+        )
+        
+        # 선택된 후보의 원래 인덱스 찾기
+        physical_idx = physical_sentences.index(physical_selected)
+        cognitive_idx = cognitive_sentences.index(cognitive_selected)
+        
+        return {
+            "physical": result["physical_candidates"][physical_idx],
+            "cognitive": result["cognitive_candidates"][cognitive_idx]
+        }
+    
+    def _find_least_similar(self, candidates: List[str], references: List[str], 
+                           vectorizer: TfidfVectorizer) -> str:
+        """후보 중에서 참조 문장들과 가장 유사도가 낮은 문장 찾기"""
+        if not references:
+            return candidates[0]
+        
+        # 모든 문장 결합하여 TF-IDF 벡터 생성
+        all_sentences = candidates + references
+        tfidf_matrix = vectorizer.fit_transform(all_sentences)
+        
+        # 후보 문장들의 벡터 (첫 n개)
+        candidate_vectors = tfidf_matrix[:len(candidates)]
+        
+        # 참조 문장들의 벡터
+        reference_vectors = tfidf_matrix[len(candidates):]
+        
+        # 각 후보와 참조 문장들 간의 평균 유사도 계산
+        similarities = []
+        for i in range(len(candidates)):
+            candidate_vec = candidate_vectors[i]
+            # 참조 문장들과의 유사도 계산
+            sim_scores = cosine_similarity(candidate_vec, reference_vectors)[0]
+            # 평균 유사도
+            avg_similarity = np.mean(sim_scores)
+            similarities.append(avg_similarity)
+        
+        # 가장 유사도가 낮은 후보 선택
+        min_sim_idx = np.argmin(similarities)
+        return candidates[min_sim_idx]
     
     def calculate_grade(self, evaluation_result: Dict) -> str:
         """평가 결과로부터 등급 계산

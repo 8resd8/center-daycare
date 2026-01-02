@@ -329,6 +329,9 @@ def render_ai_evaluation_tab():
             # 평가 결과 저장용 딕셔너리
             eval_results = []
             
+            # 이전에 생성된 문장들을 저장할 리스트
+            previous_sentences = []
+            
             for i, record in enumerate(person_records):
                 date = record.get("date", "날짜 없음")
                 status_text.text(f"🔍 {date} 특이사항 평가 중... ({i+1}/{total})")
@@ -338,14 +341,15 @@ def render_ai_evaluation_tab():
                 
                 if physical_note.strip() or cognitive_note.strip():
                     with st.spinner(f"{date} 특이사항 평가 중..."):
-                        result = evaluation_service.evaluate_special_note_with_ai(
-                            physical_note.strip(),
-                            cognitive_note.strip(),
-                            record.get("customer_name", ""),
-                            date
-                        )
+                        result = evaluation_service.evaluate_special_note_with_ai(record, previous_sentences)
                         
                         if result:
+                            # 생성된 문장들을 이전 문장 리스트에 추가
+                            if "physical" in result and "corrected_note" in result["physical"]:
+                                previous_sentences.append(result["physical"]["corrected_note"])
+                            if "cognitive" in result and "corrected_note" in result["cognitive"]:
+                                previous_sentences.append(result["cognitive"]["corrected_note"])
+                            
                             # 평가 결과 저장
                             eval_result = {
                                 "date": date,
