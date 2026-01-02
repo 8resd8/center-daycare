@@ -390,21 +390,51 @@ def render_ai_evaluation_tab():
         
         for result in eval_results:
             if result["physical_note"].strip() or result["physical_result"]:
-                physical_evaluations.append({
-                    "날짜": result["date"],
-                    "원본 내용": result["physical_note"],
-                    "수정 제안": result["physical_result"].get("corrected_note", ""),
-                    "수정 근거": result["physical_result"].get("reason", ""),
-                    "등급": "개선" if result["physical_result"] else "평가없음"
-                })
+                # 해당 날짜의 총시간 정보 확인
+                date = result["date"]
+                original_record = next((r for r in person_records if r["date"] == date), {})
+                total_service_time = original_record.get("total_service_time", "").strip()
+                
+                # 총시간이 미이용/일정없음/결석인 경우
+                if total_service_time in ["미이용", "일정없음", "결석"]:
+                    physical_evaluations.append({
+                        "날짜": date,
+                        "원본 내용": result["physical_note"],  # 원본은 그대로 유지
+                        "수정 제안": "미이용",  # 수정 제안에만 미이용 표시
+                        "수정 근거": "총시간이 " + total_service_time + "이므로 특이사항 없음",
+                        "등급": "미이용"
+                    })
+                else:
+                    physical_evaluations.append({
+                        "날짜": date,
+                        "원본 내용": result["physical_note"],
+                        "수정 제안": result["physical_result"].get("corrected_note", ""),
+                        "수정 근거": result["physical_result"].get("reason", ""),
+                        "등급": "개선" if result["physical_result"] else "평가없음"
+                    })
         
         # 평가되지 않은 원본 데이터도 표시
         print("\n=== DEBUG: 원본 데이터 표시 전 확인 ===")
         for record in person_records:
             date = record.get("date", "")
             physical_note = record.get("physical_note", "")
+            total_service_time = record.get("total_service_time", "").strip()
             print(f"날짜: {date}, 신체 특이사항: {physical_note[:50] if physical_note else '없음'}...")
-            if physical_note.strip() and not any(e["날짜"] == date for e in physical_evaluations):
+            
+            # 이미 평가된 날짜는 건너뛰기
+            if any(e["날짜"] == date for e in physical_evaluations):
+                continue
+                
+            # 총시간이 미이용/일정없음/결석인 경우
+            if total_service_time in ["미이용", "일정없음", "결석"]:
+                physical_evaluations.append({
+                    "날짜": date,
+                    "원본 내용": physical_note,  # 원본은 그대로 유지
+                    "수정 제안": "미이용",  # 수정 제안에만 미이용 표시
+                    "수정 근거": "총시간이 " + total_service_time + "이므로 특이사항 없음",
+                    "등급": "미이용"
+                })
+            elif physical_note.strip():
                 physical_evaluations.append({
                     "날짜": date,
                     "원본 내용": physical_note,
@@ -425,19 +455,49 @@ def render_ai_evaluation_tab():
         
         for result in eval_results:
             if result["cognitive_note"].strip() or result["cognitive_result"]:
-                cognitive_evaluations.append({
-                    "날짜": result["date"],
-                    "원본 내용": result["cognitive_note"],
-                    "수정 제안": result["cognitive_result"].get("corrected_note", ""),
-                    "수정 근거": result["cognitive_result"].get("reason", ""),
-                    "등급": "개선" if result["cognitive_result"] else "평가없음"
-                })
+                # 해당 날짜의 총시간 정보 확인
+                date = result["date"]
+                original_record = next((r for r in person_records if r["date"] == date), {})
+                total_service_time = original_record.get("total_service_time", "").strip()
+                
+                # 총시간이 미이용/일정없음/결석인 경우
+                if total_service_time in ["미이용", "일정없음", "결석"]:
+                    cognitive_evaluations.append({
+                        "날짜": date,
+                        "원본 내용": result["cognitive_note"],  # 원본은 그대로 유지
+                        "수정 제안": "미이용",  # 수정 제안에만 미이용 표시
+                        "수정 근거": "총시간이 " + total_service_time + "이므로 특이사항 없음",
+                        "등급": "미이용"
+                    })
+                else:
+                    cognitive_evaluations.append({
+                        "날짜": date,
+                        "원본 내용": result["cognitive_note"],
+                        "수정 제안": result["cognitive_result"].get("corrected_note", ""),
+                        "수정 근거": result["cognitive_result"].get("reason", ""),
+                        "등급": "개선" if result["cognitive_result"] else "평가없음"
+                    })
         
         # 평가되지 않은 원본 데이터도 표시
         for record in person_records:
             date = record.get("date", "")
             cognitive_note = record.get("cognitive_note", "")
-            if cognitive_note.strip() and not any(e["날짜"] == date for e in cognitive_evaluations):
+            total_service_time = record.get("total_service_time", "").strip()
+            
+            # 이미 평가된 날짜는 건너뛰기
+            if any(e["날짜"] == date for e in cognitive_evaluations):
+                continue
+                
+            # 총시간이 미이용/일정없음/결석인 경우
+            if total_service_time in ["미이용", "일정없음", "결석"]:
+                cognitive_evaluations.append({
+                    "날짜": date,
+                    "원본 내용": cognitive_note,  # 원본은 그대로 유지
+                    "수정 제안": "미이용",  # 수정 제안에만 미이용 표시
+                    "수정 근거": "총시간이 " + total_service_time + "이므로 특이사항 없음",
+                    "등급": "미이용"
+                })
+            elif cognitive_note.strip():
                 cognitive_evaluations.append({
                     "날짜": date,
                     "원본 내용": cognitive_note,
