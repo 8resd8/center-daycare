@@ -447,7 +447,13 @@ def render_ai_evaluation_tab():
     
     if physical_evaluations:
         df_physical = pd.DataFrame(physical_evaluations)
-        st.dataframe(df_physical, use_container_width=True, hide_index=True)
+        
+        # "개선" 등급의 행을 초록색으로 표시
+        def highlight_improvement_physical(row):
+            return ['color: green' if row['원본 등급'] == '개선' else '' for _ in row]
+        
+        styled_df = df_physical.style.apply(highlight_improvement_physical, axis=1)
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
     else:
         st.info("신체활동 특이사항이 없거나 평가되지 않았습니다.")
     
@@ -496,6 +502,12 @@ def render_ai_evaluation_tab():
     
     if cognitive_evaluations:
         df_cognitive = pd.DataFrame(cognitive_evaluations)
-        st.dataframe(df_cognitive, use_container_width=True, hide_index=True)
+        
+        # "개선" 등급의 행을 초록색으로 표시
+        def highlight_improvement_cognitive(row):
+            return ['color: green' if row['원본 등급'] == '개선' else '' for _ in row]
+        
+        styled_df = df_cognitive.style.apply(highlight_improvement_cognitive, axis=1)
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
     else:
         st.info("인지관리 특이사항이 없거나 평가되지 않았습니다.")
