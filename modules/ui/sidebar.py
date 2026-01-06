@@ -17,13 +17,15 @@ def render_sidebar():
     with st.sidebar:
         nav = st.radio(
             "메뉴",
-            options=["파일 처리", "수급자 관리"],
+            options=["파일 처리", "수급자 관리", "대시보드"],
             index=0,
             horizontal=True,
             key="sidebar_nav_app",
         )
         if nav == "수급자 관리":
             st.switch_page("pages/customer_manage.py")
+        elif nav == "대시보드":
+            st.switch_page("pages/dashboard.py")
 
         st.header("📂 파일 처리")
 

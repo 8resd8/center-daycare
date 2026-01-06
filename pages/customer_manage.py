@@ -21,13 +21,15 @@ st.markdown("""
 with st.sidebar:
     nav = st.radio(
         "메뉴",
-        options=["파일 처리", "수급자 관리"],
+        options=["파일 처리", "수급자 관리", "대시보드"],
         index=1,
         horizontal=True,
         key="sidebar_nav_customers",
     )
     if nav == "파일 처리":
         st.switch_page("app.py")
+    elif nav == "대시보드":
+        st.switch_page("pages/dashboard.py")
 
 
 # --- 메인 로직 ---
