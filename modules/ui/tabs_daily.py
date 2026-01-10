@@ -533,6 +533,8 @@ def _render_employee_evaluation_form(person_records: list, person_name: str):
         st.session_state.last_emp_eval_id = None
     if 'emp_eval_save_time' not in st.session_state:
         st.session_state.emp_eval_save_time = None
+    if 'emp_eval_comment_key' not in st.session_state:
+        st.session_state.emp_eval_comment_key = 0
     
     # PDF에서 파싱된 직원 이름 수집 (중복 제거)
     writer_names = set()
@@ -585,7 +587,7 @@ def _render_employee_evaluation_form(person_records: list, person_name: str):
             "코멘트 (선택사항)",
             placeholder="평가에 대한 추가 코멘트를 입력하세요...",
             height=68,
-            key="emp_eval_comment"
+            key=f"emp_eval_comment_{st.session_state.emp_eval_comment_key}"
         )
     
     # 되돌리기 버튼 표시 여부 확인 (저장 후 계속 표시)
@@ -628,6 +630,7 @@ def _render_employee_evaluation_form(person_records: list, person_name: str):
                 st.session_state.last_emp_eval_id = emp_eval_id
                 st.session_state.emp_eval_save_time = time.time()
                 st.session_state.emp_eval_toast_msg = "saved"
+                st.session_state.emp_eval_comment_key += 1
                 st.rerun()
             except Exception as e:
                 st.error(f"평가 저장 중 오류가 발생했습니다: {str(e)}")
