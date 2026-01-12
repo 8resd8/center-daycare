@@ -4,11 +4,13 @@
 - Streamlit secrets (프로덕션용)
 - 환경변수 (테스트/CLI용)
 - 의존성 주입 (단위 테스트용)
+- Rate Limit 재시도 로직 (tenacity)
 """
 
 import os
 import openai
 from typing import Optional, Any
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 # AI Client instance for dependency injection (테스트용)
 _ai_client_instance: Optional['AIClient'] = None
@@ -25,8 +27,14 @@ class AIClient:
         """OpenAI 클라이언트 인스턴스 반환"""
         return self._client
     
+    @retry(
+        stop=stop_after_attempt(5),  # 최대 5회 재시도
+        wait=wait_exponential(multiplier=1, min=1, max=60),  # 지수 백오프 (1초~60초)
+        retry=retry_if_exception_type(openai.RateLimitError),  # Rate Limit 에러만 재시도
+        before_sleep=lambda retry_state: print(f"Rate limit reached. Retrying in {retry_state.next_action.sleep} seconds... (Attempt {retry_state.attempt_number}/5)")
+    )
     def chat_completion(self, model: str, messages: list, **kwargs):
-        """채팅 완성 요청"""
+        """채팅 완성 요청 (Rate Limit 자동 재시도 포함)"""
         return self._client.chat.completions.create(
             model=model,
             messages=messages,
