@@ -1,0 +1,11 @@
+[server]
+port = 8501
+address = "0.0.0.0"
+maxUploadSize = 50
+enableCORS = true
+enableXsrfProtection = true
+
+[browser]
+gatherUsageStats = false
+serverAddress = "mcplink.co.kr"
+serverPort = 443
