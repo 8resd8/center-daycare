@@ -285,56 +285,55 @@ def _render_person_date_filter(customer_name: str, active_doc):
     """대상자별 날짜 필터 렌더링 (메인화면)"""
     default_start, default_end = _get_current_month_range()
 
-    # 대상자별 날짜 필터 세션 키
+    # 위젯 키
     safe_name = customer_name.replace(" ", "_")
-    person_start_key = f"main_filter_start_{safe_name}"
-    person_end_key = f"main_filter_end_{safe_name}"
+    start_key = f"main_p_start_{safe_name}"
+    end_key = f"main_p_end_{safe_name}"
 
-    if person_start_key not in st.session_state:
-        st.session_state[person_start_key] = default_start
-    if person_end_key not in st.session_state:
-        st.session_state[person_end_key] = default_end
+    # 초기값 설정
+    if start_key not in st.session_state:
+        st.session_state[start_key] = default_start
+    if end_key not in st.session_state:
+        st.session_state[end_key] = default_end
+
+    # 버튼 클릭 플래그 확인 및 값 변경 (위젯 생성 전)
+    last_week_flag = f"_set_last_week_{safe_name}"
+    prev_week_flag = f"_set_prev_week_{safe_name}"
+    
+    if st.session_state.get(last_week_flag):
+        last_mon, last_sun = _get_last_week_range()
+        st.session_state[start_key] = last_mon
+        st.session_state[end_key] = last_sun
+        del st.session_state[last_week_flag]
+    
+    if st.session_state.get(prev_week_flag):
+        current_start = st.session_state[start_key]
+        current_monday = current_start - timedelta(days=current_start.weekday())
+        prev_monday = current_monday - timedelta(days=7)
+        prev_sunday = prev_monday + timedelta(days=6)
+        st.session_state[start_key] = prev_monday
+        st.session_state[end_key] = prev_sunday
+        del st.session_state[prev_week_flag]
 
     # 해당 인원 필터 조회
     col1, col2 = st.columns(2)
     with col1:
-        p_start = st.date_input(
-            "시작",
-            value=st.session_state[person_start_key],
-            key=f"main_p_start_{safe_name}"
-        )
+        st.date_input("시작", key=start_key)
     with col2:
-        p_end = st.date_input(
-            "종료",
-            value=st.session_state[person_end_key],
-            key=f"main_p_end_{safe_name}"
-        )
-
-    # 날짜 값 세션에 저장
-    st.session_state[person_start_key] = p_start
-    st.session_state[person_end_key] = p_end
+        st.date_input("종료", key=end_key)
 
     # 버튼: 조회 | 지난주 | 1주전
     col_btn1, col_btn2, col_btn3 = st.columns(3)
     with col_btn1:
         if st.button(f"🔍 조회", use_container_width=True, key=f"main_p_search_{safe_name}"):
-            _execute_person_search(customer_name, st.session_state[person_start_key], st.session_state[person_end_key])
+            _execute_person_search(customer_name, st.session_state[start_key], st.session_state[end_key])
     with col_btn2:
         if st.button(f"📅 지난주", use_container_width=True, key=f"main_p_lastweek_{safe_name}"):
-            # 오늘 기준 지난주 월~일
-            last_mon, last_sun = _get_last_week_range()
-            st.session_state[person_start_key] = last_mon
-            st.session_state[person_end_key] = last_sun
+            st.session_state[last_week_flag] = True
             st.rerun()
     with col_btn3:
         if st.button(f"⏪ 1주전", use_container_width=True, key=f"main_p_prevweek_{safe_name}"):
-            # 필터 시작일 기준 1주일 전 월~일
-            current_start = st.session_state[person_start_key]
-            current_monday = current_start - timedelta(days=current_start.weekday())
-            prev_monday = current_monday - timedelta(days=7)
-            prev_sunday = prev_monday + timedelta(days=6)
-            st.session_state[person_start_key] = prev_monday
-            st.session_state[person_end_key] = prev_sunday
+            st.session_state[prev_week_flag] = True
             st.rerun()
 
 def _execute_person_search(customer_name: str, start_date, end_date):
