@@ -66,6 +66,31 @@ def _check_auto_search():
             _execute_db_search(start_date, end_date)
 
 
+def _update_filter_from_parsed_data(parsed_data):
+    """PDF 파싱 데이터에서 날짜 범위를 추출하여 필터에 반영"""
+    if not parsed_data:
+        return
+    
+    dates = []
+    for record in parsed_data:
+        record_date = record.get('date')
+        if record_date:
+            # 문자열이면 date로 변환
+            if isinstance(record_date, str):
+                try:
+                    from datetime import datetime as dt
+                    record_date = dt.strptime(record_date, '%Y-%m-%d').date()
+                except:
+                    continue
+            dates.append(record_date)
+    
+    if dates:
+        min_date = min(dates)
+        max_date = max(dates)
+        st.session_state['db_filter_start'] = min_date
+        st.session_state['db_filter_end'] = max_date
+
+
 def _save_session_to_storage():
     """세션 데이터를 로컬스토리지에 저장 (JavaScript 연동)"""
     # 날짜 필터 값 저장
@@ -177,7 +202,10 @@ def render_sidebar():
                             "error": None,
                         }
                         st.session_state.docs.append(new_doc)
-                        newly_added_id = file_id # 새로 추가된 파일 ID 기记忆
+                        newly_added_id = file_id
+                        
+                        # PDF 데이터에서 날짜 범위 추출하여 필터에 반영
+                        _update_filter_from_parsed_data(parsed)
                         
                         # 파싱 완료 메시지를 session_state에 저장
                         st.session_state.parsing_success = f"{total_records}건 데이터 조회 ({elapsed_time:.1f}초)"
@@ -751,50 +779,49 @@ def _render_date_filter_section():
     # 날짜 필터링 (디폴트: 현재 달)
     default_start, default_end = _get_current_month_range()
     
-    # 세션에서 날짜 범위 복원
-    if 'db_filter_start' not in st.session_state:
-        st.session_state.db_filter_start = default_start
-    if 'db_filter_end' not in st.session_state:
-        st.session_state.db_filter_end = default_end
+    # 위젯 키
+    start_key = "db_filter_start"
+    end_key = "db_filter_end"
+    
+    # 초기값 설정
+    if start_key not in st.session_state:
+        st.session_state[start_key] = default_start
+    if end_key not in st.session_state:
+        st.session_state[end_key] = default_end
+    
+    # 버튼 클릭 플래그 확인 및 값 변경 (위젯 생성 전)
+    if st.session_state.get('_set_last_week'):
+        last_mon, last_sun = _get_last_week_range()
+        st.session_state[start_key] = last_mon
+        st.session_state[end_key] = last_sun
+        del st.session_state['_set_last_week']
+    
+    if st.session_state.get('_set_prev_week'):
+        current_start = st.session_state[start_key]
+        current_monday = current_start - timedelta(days=current_start.weekday())
+        prev_monday = current_monday - timedelta(days=7)
+        prev_sunday = prev_monday + timedelta(days=6)
+        st.session_state[start_key] = prev_monday
+        st.session_state[end_key] = prev_sunday
+        del st.session_state['_set_prev_week']
     
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input(
-            "시작일",
-            value=st.session_state.db_filter_start,
-            key="db_start_date"
-        )
+        st.date_input("시작일", key=start_key)
     with col2:
-        end_date = st.date_input(
-            "종료일",
-            value=st.session_state.db_filter_end,
-            key="db_end_date"
-        )
-    
-    # 날짜 범위 저장
-    st.session_state.db_filter_start = start_date
-    st.session_state.db_filter_end = end_date
+        st.date_input("종료일", key=end_key)
     
     col_btn1, col_btn2, col_btn3 = st.columns(3)
     with col_btn1:
         if st.button("🔍 조회", use_container_width=True, key="db_search_btn"):
-            _execute_db_search(start_date, end_date)
+            _execute_db_search(st.session_state[start_key], st.session_state[end_key])
     with col_btn2:
         if st.button("📅 지난주", use_container_width=True, key="db_last_week_btn"):
-            # 오늘 기준 지난주 월~일
-            last_mon, last_sun = _get_last_week_range()
-            st.session_state.db_filter_start = last_mon
-            st.session_state.db_filter_end = last_sun
+            st.session_state['_set_last_week'] = True
             st.rerun()
     with col_btn3:
         if st.button("⏪ 1주전", use_container_width=True, key="db_prev_week_btn"):
-            # 필터 시작일 기준 1주일 전 월~일
-            current_start = st.session_state.db_filter_start
-            current_monday = current_start - timedelta(days=current_start.weekday())
-            prev_monday = current_monday - timedelta(days=7)
-            prev_sunday = prev_monday + timedelta(days=6)
-            st.session_state.db_filter_start = prev_monday
-            st.session_state.db_filter_end = prev_sunday
+            st.session_state['_set_prev_week'] = True
             st.rerun()
     
     # 현재 조회된 기간 표시
