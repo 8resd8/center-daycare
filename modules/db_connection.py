@@ -50,13 +50,18 @@ def get_db_config() -> Dict[str, Any]:
             'user': os.environ.get('DB_USER'),
             'password': os.environ.get('DB_PASSWORD'),
             'database': os.environ.get('DB_NAME'),
+            'time_zone': '+09:00',
         }
     
     # Streamlit secrets에서 설정 확인
     try:
         import streamlit as st
         if hasattr(st, 'secrets') and 'mysql' in st.secrets:
-            return dict(st.secrets["mysql"])
+            config = dict(st.secrets["mysql"])
+            # KST 타임존 설정 추가 (없는 경우에만)
+            if 'time_zone' not in config:
+                config['time_zone'] = '+09:00'
+            return config
     except (ImportError, RuntimeError):
         pass
     
