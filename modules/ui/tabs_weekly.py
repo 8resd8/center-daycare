@@ -101,9 +101,18 @@ def render_records_tab():
 
         st.divider()
         st.markdown("#### 📈 주간 상태 변화")
-        week_dates = sorted([r.get("date") for r in data if r.get("date")])
-        if week_dates:
-            week_start = week_dates[-1]
+        
+        # 필터 시작일을 주간 분석 기준으로 사용
+        safe_name = customer_name.replace(" ", "_")
+        filter_start_key = f"main_p_start_{safe_name}"
+        filter_start = st.session_state.get(filter_start_key)
+        
+        if filter_start:
+            # 필터 시작일을 문자열로 변환
+            if isinstance(filter_start, date):
+                week_start = filter_start.strftime("%Y-%m-%d")
+            else:
+                week_start = str(filter_start)
             
             # Resolve customer_id before using it
             customer_id = (data[0].get("customer_id") if data else None)

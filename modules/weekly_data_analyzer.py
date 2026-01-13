@@ -125,26 +125,27 @@ def compute_weekly_status(customer_name: str, week_start_str: str, customer_id: 
     
     Args:
         customer_name: 고객명
-        week_start_str: 주 시작일 (YYYY-MM-DD)
+        week_start_str: 주 시작일 (YYYY-MM-DD) - 필터의 시작일이 이번주 시작일이 됨
         customer_id: 고객 ID
         use_cache: 캐시 사용 여부 (기본값: True)
     """
     try:
         week_start = datetime.strptime(week_start_str, "%Y-%m-%d").date()
-        aligned_start = week_start - timedelta(days=week_start.weekday())
+        # 필터 시작일을 그대로 이번주 시작일로 사용 (월요일 정렬 제거)
+        curr_start = week_start
     except Exception:
         return {"error": "날짜 형식이 올바르지 않습니다."}
     
-    curr_end = aligned_start + timedelta(days=6)
+    curr_end = curr_start + timedelta(days=6)
     
     # 캐시 확인 (use_cache=True일 때)
     if use_cache and customer_id:
-        cached = _load_cached_weekly_status(customer_id, aligned_start, curr_end)
+        cached = _load_cached_weekly_status(customer_id, curr_start, curr_end)
         if cached:
             return cached
 
     try:
-        rows, prev_range, curr_range = _fetch_two_week_records(customer_name, aligned_start)
+        rows, prev_range, curr_range = _fetch_two_week_records(customer_name, curr_start)
     except Exception as e:
         return {"error": str(e)}
 
@@ -158,7 +159,7 @@ def compute_weekly_status(customer_name: str, week_start_str: str, customer_id: 
 
     for row in rows:
         record_date = row["date"]
-        bucket = "curr" if record_date >= week_start else "prev"
+        bucket = "curr" if record_date >= curr_start else "prev"
         for key, (field, _) in CATEGORIES.items():
             buckets[bucket][key].append(_score_text(row.get(field)))
 
@@ -200,7 +201,7 @@ def compute_weekly_status(customer_name: str, week_start_str: str, customer_id: 
     
     # 결과 캐싱 (customer_id가 있을 때만)
     if customer_id:
-        _save_weekly_status_cache(customer_id, aligned_start, curr_end, result)
+        _save_weekly_status_cache(customer_id, curr_start, curr_end, result)
     
     return result
 
