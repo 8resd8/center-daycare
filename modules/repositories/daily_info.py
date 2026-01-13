@@ -150,12 +150,11 @@ class DailyInfoRepository(BaseRepository):
         - 고객명 일괄 조회로 N+1 쿼리 방지
         - 기존 레코드 일괄 조회
         - 청크 단위 메모리 해제
-        - 동적 배치 크기 조정
         
         Args:
             records: List of parsed records to save
             batch_size: Number of records to process per transaction 
-                       (None이면 레코드 수에 따라 자동 조정)
+                       (None이면 기본값 20 사용)
         
         Returns:
             Total number of records saved
@@ -166,10 +165,9 @@ class DailyInfoRepository(BaseRepository):
         saved_count = 0
         total_records = len(records)
         
-        # 동적 배치 크기 조정 (메모리 모드 기반)
         if batch_size is None:
-            from modules.utils.memory_utils import get_batch_size
-            batch_size = get_batch_size(total_records)
+            from modules.utils.memory_utils import BATCH_SIZE_MEDIUM
+            batch_size = BATCH_SIZE_MEDIUM
         
         # 1단계: 모든 고객명 수집 및 일괄 조회/생성
         customer_names = list(set(r.get("customer_name") for r in records if r.get("customer_name")))

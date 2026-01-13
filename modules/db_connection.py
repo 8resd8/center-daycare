@@ -80,9 +80,8 @@ def _get_connection_pool() -> pooling.MySQLConnectionPool:
             except:
                 pass
         
-        # 메모리 모드에 따른 동적 풀 크기 설정
-        from modules.utils.memory_utils import get_db_pool_size
-        pool_size = get_db_pool_size()
+        from modules.utils.memory_utils import DB_POOL_SIZE
+        pool_size = DB_POOL_SIZE
         
         _pool_config = config.copy()
         _connection_pool = pooling.MySQLConnectionPool(
