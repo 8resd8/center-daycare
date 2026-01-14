@@ -30,6 +30,15 @@ class CategoryDisplay:
         "🩺 간호관리",
         "🏃 기능회복"
     ]
+    
+    # 한글 카테고리명을 DB 영문명으로 변환
+    KOREAN_TO_ENGLISH = {
+        "기본정보": "공통",
+        "신체활동지원": "신체",
+        "인지관리": "인지",
+        "간호관리": "간호",
+        "기능회복": "기능"
+    }
 
 
 class RequiredFields:
