@@ -4,7 +4,7 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 import numpy as np
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta, datetime
 from dateutil.relativedelta import relativedelta
 
 from modules.db_connection import get_db_connection
@@ -208,22 +208,96 @@ with st.sidebar:
     
     # 기간 설정
     st.subheader("📅 기간 설정")
-    today = date.today()
-    year_start = date(today.year, 1, 1)
     
-    date_range = st.date_input(
-        "분석 기간",
-        value=(year_start, today),
-        min_value=date(2020, 1, 1),
-        max_value=today,
-        key="date_range"
-    )
+    # 날짜 필터링 (디폴트: 현재 달)
+    def _get_current_month_range():
+        """현재 달의 시작일과 종료일 반환"""
+        today = date.today()
+        first_day = today.replace(day=1)
+        # 종료일은 오늘 날짜까지만 허용
+        last_day = today
+        return first_day, last_day
     
-    # date_range가 튜플인지 확인
-    if isinstance(date_range, tuple) and len(date_range) == 2:
-        start_date, end_date = date_range
-    else:
-        start_date, end_date = year_start, today
+    def _get_last_month_range():
+        """저번달 1일 ~ 말일 반환"""
+        today = date.today()
+        if today.month == 1:
+            # 1월이면 지난해 12월
+            last_month = today.replace(year=today.year - 1, month=12, day=1)
+        else:
+            # 그 외 달
+            last_month = today.replace(month=today.month - 1, day=1)
+        
+        # 저번달의 마지막 날
+        if last_month.month == 12:
+            next_month = last_month.replace(year=last_month.year + 1, month=1, day=1)
+        else:
+            next_month = last_month.replace(month=last_month.month + 1, day=1)
+        
+        last_day = next_month - timedelta(days=1)
+        return last_month, last_day
+    
+    default_start, default_end = _get_current_month_range()
+    
+    # 위젯 키
+    start_key = "db_filter_start"
+    end_key = "db_filter_end"
+    
+    # 초기값 설정
+    if start_key not in st.session_state:
+        st.session_state[start_key] = default_start
+    if end_key not in st.session_state:
+        st.session_state[end_key] = default_end
+    
+    # 버튼 클릭 플래그 확인 및 값 변경 (위젯 생성 전)
+    if st.session_state.get('_set_last_month'):
+        last_month_start, last_month_end = _get_last_month_range()
+        st.session_state[start_key] = last_month_start
+        st.session_state[end_key] = last_month_end
+        del st.session_state['_set_last_month']
+    
+    if st.session_state.get('_set_prev_month'):
+        current_start = st.session_state[start_key]
+        # 시작일 기준 저번달 설정
+        if current_start.month == 1:
+            prev_month = current_start.replace(year=current_start.year - 1, month=12, day=1)
+        else:
+            prev_month = current_start.replace(month=current_start.month - 1, day=1)
+        
+        # 저번달의 마지막 날
+        if prev_month.month == 12:
+            next_month = prev_month.replace(year=prev_month.year + 1, month=1, day=1)
+        else:
+            next_month = prev_month.replace(month=prev_month.month + 1, day=1)
+        
+        prev_month_end = next_month - timedelta(days=1)
+        st.session_state[start_key] = prev_month
+        st.session_state[end_key] = prev_month_end
+        del st.session_state['_set_prev_month']
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.date_input("시작일", key=start_key, min_value=date(2020, 1, 1), max_value=date.today())
+    with col2:
+        st.date_input("종료일", key=end_key, min_value=date(2020, 1, 1), max_value=date.today())
+    
+    #col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1, 1])
+    col_btn1, col_btn2, col_btn3 = st.columns(3)
+    with col_btn1:
+        if st.button("조회", use_container_width=True, key="db_search_btn"):
+            st.rerun()
+    with col_btn2:
+        if st.button("한달전", use_container_width=True, key="db_prev_month_btn"):
+            st.session_state['_set_prev_month'] = True
+            st.rerun()
+    with col_btn3:
+        if st.button("지난달", use_container_width=True, key="db_last_month_btn"):
+            st.session_state['_set_last_month'] = True
+            st.rerun()
+
+    # 세션 상태에서 날짜 가져오기
+    start_date = st.session_state[start_key]
+    end_date = st.session_state[end_key]
 
 # --- 데이터 로드 ---
 data = load_dashboard_data(start_date, end_date)
