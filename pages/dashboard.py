@@ -491,8 +491,8 @@ with tab1:
             category_counts.columns = ['category', 'count']
             
             bar_chart = alt.Chart(category_counts).mark_bar().encode(
-                x=alt.X('category:N', title='카테고리', sort='-y'),
-                y=alt.Y('count:Q', title='건수'),
+                x=alt.X('category:N', title='카테고리', sort='-y', axis=alt.Axis(labelAngle=0)),
+                y=alt.Y('count:Q', title='건수', axis=alt.Axis(labelAngle=0)),
                 color=alt.Color('category:N', legend=None, scale=alt.Scale(scheme='blues')),
                 tooltip=[
                     alt.Tooltip('category:N', title='카테고리'),
@@ -602,8 +602,8 @@ with tab3:
             
             # 바 차트로 표현
             type_bar = alt.Chart(full_type_data).mark_bar().encode(
-                x=alt.X('type:N', title='평가 유형', sort=eval_types),
-                y=alt.Y('count:Q', title='건수'),
+                x=alt.X('type:N', title='평가 유형', sort=eval_types, axis=alt.Axis(labelAngle=0)),
+                y=alt.Y('count:Q', title='건수', axis=alt.Axis(labelAngle=0)),
                 color=alt.Color('type:N', title='유형', scale=type_colors, legend=None),
                 tooltip=[
                     alt.Tooltip('type:N', title='유형'),
