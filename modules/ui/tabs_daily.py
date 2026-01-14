@@ -551,7 +551,7 @@ def _render_employee_evaluation_form(person_records: list, person_name: str):
     
     # 카테고리 및 평가 유형 옵션
     category_options = ['공통', '신체', '인지', '간호', '기능']
-    evaluation_type_options = ['누락', '내용부족', '오타', '문법']
+    evaluation_type_options = ['누락', '내용부족', '오타', '문법', '오류']
     
     # record_id 미리 조회 (폼 외부에서 사용)
     first_record = person_records[0]
