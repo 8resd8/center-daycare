@@ -85,6 +85,8 @@ class EmployeeEvaluationRepository(BaseRepository):
         self,
         emp_eval_id: int,
         evaluation_date: date,
+        category: str = None,
+        evaluation_type: str = None,
         target_date: date = None,
         evaluator_user_id: int = None,
         score: int = 1,
@@ -95,11 +97,22 @@ class EmployeeEvaluationRepository(BaseRepository):
             UPDATE employee_evaluations SET
                 target_date = %s,
                 evaluator_user_id = %s,
+                category = COALESCE(%s, category),
+                evaluation_type = COALESCE(%s, evaluation_type),
                 score = %s,
                 comment = %s,
                 evaluation_date = %s
             WHERE emp_eval_id = %s
         '''
         return self._execute_transaction(
-            update_query, (target_date, evaluator_user_id, score, comment, evaluation_date, emp_eval_id)
+            update_query, (
+                target_date,
+                evaluator_user_id,
+                category,
+                evaluation_type,
+                score,
+                comment,
+                evaluation_date,
+                emp_eval_id,
+            )
         )

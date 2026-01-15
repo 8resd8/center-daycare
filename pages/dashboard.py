@@ -348,14 +348,30 @@ st.title("직원 관리 현황")
 st.caption(f"분석 기간: {start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}")
 
 # ============================================
-# 탭 구성
+# 탭 구성 (session_state로 현재 탭 유지)
 # ============================================
-tab1, tab2, tab3 = st.tabs(["📊 통계 분석", "📋 직원별 명단", "📝 개별 리포트"])
+# 탭 상태 초기화
+if 'selected_tab' not in st.session_state:
+    st.session_state.selected_tab = "📊 통계 분석"
+
+# 탭 선택 (라디오 버튼으로 변경하여 상태 유지)
+tab_options = ["📊 통계 분석", "📋 직원별 명단", "📝 개별 리포트"]
+selected_tab = st.radio(
+    "탭 선택",
+    tab_options,
+    index=tab_options.index(st.session_state.selected_tab) if st.session_state.selected_tab in tab_options else 0,
+    horizontal=True,
+    key="tab_selector",
+    label_visibility="collapsed"
+)
+st.session_state.selected_tab = selected_tab
+
+st.markdown("---")
 
 # ============================================
 # 탭 1: 통계 분석 (Bird's Eye View)
 # ============================================
-with tab1:
+if selected_tab == "📊 통계 분석":
     # KPI 카드
     st.subheader("핵심 지표")
     
@@ -429,7 +445,9 @@ with tab1:
             strokeWidth=2,
             point=True
         ).encode(
-            x=alt.X('date:T', title='날짜', axis=alt.Axis(format='%m/%d')),
+            x=alt.X('yearmonthdate(date):T', 
+                    title='날짜', 
+                    axis=alt.Axis(format='%m/%d', labelOverlap=False, labelAngle=-45)),
             y=alt.Y('count:Q', title='건수'),
             color=alt.Color('evaluation_type:N', title='평가 유형', scale=type_colors),
             tooltip=[
@@ -507,7 +525,7 @@ with tab1:
 # ============================================
 # 탭 2: 직원별 명단 (랭킹 테이블)
 # ============================================
-with tab2:
+elif selected_tab == "📋 직원별 명단":
     st.subheader("직원별 지적 현황 랭킹")
     
     if not df_emp_eval.empty:
@@ -557,7 +575,7 @@ with tab2:
 # ============================================
 # 탭 3: 개별 리포트 (Deep Dive)
 # ============================================
-with tab3:
+elif selected_tab == "📝 개별 리포트":
     if is_individual_view:
         # 개별 프로필 섹션
         st.subheader(f"👤 {selected_user} 상세 리포트")
@@ -632,33 +650,139 @@ with tab3:
             # 날짜순 정렬
             user_data_sorted = user_data.sort_values('evaluation_date', ascending=False)
             
-            # 데이터프레임 생성
+            # 데이터프레임 생성 (_id는 내부 추적용, 사용자에게는 보이지 않음)
             eval_history_df = pd.DataFrame({
-                '평가일자': user_data_sorted['evaluation_date'].apply(
-                    lambda x: x.strftime('%Y-%m-%d') if isinstance(x, pd.Timestamp) else str(x)
-                ),
-                '해당날짜': user_data_sorted['target_date'].apply(
-                    lambda x: x.strftime('%Y-%m-%d') if pd.notna(x) and isinstance(x, (pd.Timestamp, date)) else ''
-                ),
+                '_id': user_data_sorted['emp_eval_id'],  # 내부 추적용 ID
+                '평가일자': pd.to_datetime(user_data_sorted['evaluation_date']),
+                '해당날짜': pd.to_datetime(user_data_sorted['target_date'], errors='coerce'),
                 '카테고리': user_data_sorted['category'],
                 '평가유형': user_data_sorted['evaluation_type'],
-                '코멘트': user_data_sorted['comment'].apply(
-                    lambda x: (x[:50] + '...') if isinstance(x, str) and len(x) > 50 else (x if pd.notna(x) else '')
-                )
+                '코멘트': user_data_sorted['comment']
             })
+
+            # DB enum 기준 기본값 보정 (NOT NULL 컬럼)
+            eval_history_df['카테고리'] = eval_history_df['카테고리'].fillna('공통')
+            eval_history_df['평가유형'] = eval_history_df['평가유형'].fillna('누락')
             
-            st.dataframe(
+            edited_eval_df = st.data_editor(
                 eval_history_df,
                 use_container_width=True,
+                num_rows="dynamic",
                 hide_index=True,
+                key="eval_history_editor",
                 column_config={
-                    "평가일자": st.column_config.TextColumn("평가일자", width="small"),
-                    "해당날짜": st.column_config.TextColumn("해당날짜", width="small"),
-                    "카테고리": st.column_config.TextColumn("카테고리", width="small"),
-                    "평가유형": st.column_config.TextColumn("평가유형", width="small"),
+                    "_id": st.column_config.NumberColumn(
+                        "ID",
+                        disabled=True,
+                        width="small"
+                    ),
+                    "평가일자": st.column_config.DateColumn(
+                        "평가일자",
+                        min_value=date(2020, 1, 1),
+                        max_value=date.today(),
+                        format="YYYY-MM-DD",
+                        width="small"
+                    ),
+                    "해당날짜": st.column_config.DateColumn(
+                        "해당날짜",
+                        min_value=date(2020, 1, 1),
+                        max_value=date.today(),
+                        format="YYYY-MM-DD",
+                        width="small"
+                    ),
+                    "카테고리": st.column_config.SelectboxColumn(
+                        "카테고리",
+                        options=["공통", "신체", "인지", "간호", "기능"],
+                        required=True,
+                        width="small"
+                    ),
+                    "평가유형": st.column_config.SelectboxColumn(
+                        "평가유형",
+                        options=['누락', '내용부족', '오타', '문법', '오류'],
+                        required=True,
+                        width="small"
+                    ),
                     "코멘트": st.column_config.TextColumn("코멘트", width="large")
                 }
             )
+            
+            # 저장 버튼
+            if st.button("💾 변경사항 저장", type="primary", use_container_width=True, key="save_eval_changes"):
+                try:
+                    from modules.repositories.employee_evaluation import EmployeeEvaluationRepository
+                    
+                    eval_repo = EmployeeEvaluationRepository()
+                    changes_log = {"updated": 0, "deleted": 0}
+                    
+                    # 삭제된 항목 확인 및 즉시 삭제 (_id 컬럼 기준)
+                    original_ids = set(eval_history_df['_id'].dropna().astype(int))
+                    current_ids = set(edited_eval_df['_id'].dropna().astype(int))
+                    deleted_ids = original_ids - current_ids
+                    
+                    # 삭제 실행 (확인 없이 바로)
+                    for d_id in deleted_ids:
+                        eval_repo.delete_evaluation(int(d_id))
+                    changes_log["deleted"] = len(deleted_ids)
+                    
+                    # 수정된 항목 처리
+                    for idx, row in edited_eval_df.iterrows():
+                        emp_eval_id = row['_id']
+                        if pd.notna(emp_eval_id) and int(emp_eval_id) in current_ids:
+                            # 날짜 변환
+                            eval_date = row['평가일자']
+                            if isinstance(eval_date, pd.Timestamp):
+                                eval_date = eval_date.date()
+                            
+                            target_date = row['해당날짜']
+                            if pd.notna(target_date) and isinstance(target_date, pd.Timestamp):
+                                target_date = target_date.date()
+                            else:
+                                target_date = None
+                            
+                            # 기존 데이터와 비교하여 변경된 경우만 업데이트
+                            original_row = eval_history_df[eval_history_df['_id'] == emp_eval_id].iloc[0]
+                            
+                            if (str(row['카테고리']) != str(original_row['카테고리']) or
+                                str(row['평가유형']) != str(original_row['평가유형']) or
+                                str(row['코멘트']) != str(original_row['코멘트']) or
+                                eval_date != (original_row['평가일자'].date() if isinstance(original_row['평가일자'], pd.Timestamp) else original_row['평가일자']) or
+                                target_date != (original_row['해당날짜'].date() if pd.notna(original_row['해당날짜']) and isinstance(original_row['해당날짜'], pd.Timestamp) else None)):
+                                
+                                eval_repo.update_evaluation(
+                                    emp_eval_id=int(emp_eval_id),
+                                    evaluation_date=eval_date,
+                                    category=(
+                                        str(row['카테고리']).strip()
+                                        if pd.notna(row['카테고리']) and str(row['카테고리']).strip() != ""
+                                        else None
+                                    ),
+                                    evaluation_type=(
+                                        str(row['평가유형']).strip()
+                                        if pd.notna(row['평가유형']) and str(row['평가유형']).strip() != ""
+                                        else None
+                                    ),
+                                    target_date=target_date,
+                                    comment=str(row['코멘트']) if pd.notna(row['코멘트']) else None
+                                )
+                                changes_log["updated"] += 1
+                    
+                    # 결과 메시지 및 화면 갱신
+                    msg = []
+                    if changes_log['deleted']: msg.append(f"{changes_log['deleted']}건 삭제")
+                    if changes_log['updated']: msg.append(f"{changes_log['updated']}건 수정")
+                    
+                    if msg:
+                        st.toast(f"저장 완료: {', '.join(msg)}", icon="✅")
+                    else:
+                        st.toast("변경 사항이 없습니다.", icon="ℹ️")
+                    
+                    # 캐시 클리어 후 데이터 새로고침
+                    load_dashboard_data.clear()
+                    st.session_state.selected_tab = selected_tab
+                    st.rerun()
+                
+                except Exception as e:
+                    st.toast(f"저장 중 오류 발생: {str(e)}", icon="❌")
         else:
             st.info(f"{selected_user}님의 평가 기록이 없습니다.")
     else:
