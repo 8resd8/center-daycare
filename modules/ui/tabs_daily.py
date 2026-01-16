@@ -429,6 +429,7 @@ def render_ai_evaluation_tab():
         if total_service_time in ["미이용", "일정없음", "결석"]:
             physical_evaluations.append({
                 "날짜": date,
+                "작성자": record.get("writer_phy", ""),
                 "원본 등급": "평가없음",
                 "수정 제안": "미이용",
                 "원본 내용": physical_note
@@ -447,6 +448,7 @@ def render_ai_evaluation_tab():
             
             physical_evaluations.append({
                 "날짜": date,
+                "작성자": record.get("writer_phy", ""),
                 "원본 등급": evaluation['grade'],
                 "수정 제안": evaluation['suggestion'],
                 "원본 내용": physical_note
@@ -485,6 +487,7 @@ def render_ai_evaluation_tab():
         if total_service_time in ["미이용", "일정없음", "결석"]:
             cognitive_evaluations.append({
                 "날짜": date,
+                "작성자": record.get("writer_cog", ""),
                 "원본 등급": "평가없음",
                 "수정 제안": "미이용",
                 "원본 내용": cognitive_note
@@ -503,6 +506,7 @@ def render_ai_evaluation_tab():
             
             cognitive_evaluations.append({
                 "날짜": date,
+                "작성자": record.get("writer_cog", ""),
                 "원본 등급": evaluation['grade'],
                 "수정 제안": evaluation['suggestion'],
                 "원본 내용": cognitive_note
