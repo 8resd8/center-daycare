@@ -321,22 +321,25 @@ def render_ai_evaluation_tab():
             subset=[col for col in df.columns if col != '날짜']
         )
         
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        with st.expander("📝 상세 추가 정보", expanded=False):
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
         
         # 고객 정보는 별도로 표시
-        st.markdown("---")
-        st.write("**👤 고객 정보**")
-        if person_records:
-            first_record = person_records[0]
-            customer_info_data = []
-            for display_name, field_name in OptionalFields.CUSTOMER_INFO.items():
-                value = first_record.get(field_name, "-")
-                customer_info_data.append({"항목": display_name, "값": value})
-            
-            df_customer = pd.DataFrame(customer_info_data)
-            st.dataframe(df_customer, use_container_width=True, hide_index=True)
+        st.divider()
+
+        with st.expander("👤 수급자 정보", expanded=False):
+            if person_records:
+                first_record = person_records[0]
+                customer_info_data = []
+                for display_name, field_name in OptionalFields.CUSTOMER_INFO.items():
+                    value = first_record.get(field_name, "-")
+                    customer_info_data.append({"항목": display_name, "값": value})
+                
+                df_customer = pd.DataFrame(customer_info_data)
+                st.dataframe(df_customer, use_container_width=True, hide_index=True)
 
     st.divider()
+
     st.write("### 📝 특이사항 AI 평가 실행")
     st.info("모든 날짜의 특이사항을 일괄 평가하여 수정 제안을 받습니다.")
     
