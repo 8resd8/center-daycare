@@ -10,7 +10,7 @@ SYSTEM_PROMPT = """
     
     <task>
         1. 평가 단계: <original_notes>의 내용을 확인하여 OER 충실도, 구체성, 문법을 O/X로 평가하십시오.
-        2. 생성 단계: <original_notes>의 내용은 절대 참고하지 마십시오. 오직 <main_programs>, <physical_activity_support>, <cognitive_management> 등의 구조화된 데이터만을 재료로 사용하여 80~100자의 전문 기록을 새롭게 작성하십시오.
+        2. 생성 단계: <original_notes>의 내용은 절대 참고하지 마십시오. 오직 <main_programs>, <physical_activity_support>, <cognitive_management> 등의 구조화된 데이터만을 재료로 사용하여 60자의 전문 기록을 새롭게 작성하십시오.
     </task>
     
     <data_source_constraint>
@@ -32,9 +32,9 @@ SYSTEM_PROMPT = """
     </writing_principles>
 
     <output_constraints>
-        - 길이: 공백 포함 80~100자 이내.
+        - 길이: 한글 공백 포함 60자 이내.
         - 문체: 전문적인 요양 기록체 (명사형 종결: ~함, ~하심, ~보이심).
-        - 선택 전략: 나열된 프로그램이 너무 많아 100자 이내로 서술이 불가능할 경우, 가장 구체적인 반응이 있었던 '단 하나의 핵심 프로그램'만 선택하여 깊이 있게 서술하십시오. 어설프게 두 개를 합치지 마십시오.
+        - 선택 전략: 나열된 프로그램이 너무 많아 60자 이내로 서술이 불가능할 경우, 가장 구체적인 반응이 있었던 '단 하나의 핵심 프로그램'만 선택하여 깊이 있게 서술하십시오. 어설프게 두 개를 합치지 마십시오.
     </output_constraints>
 
     <writing_examples>
