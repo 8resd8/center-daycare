@@ -215,7 +215,7 @@ class EvaluationService:
             return None
         
         try:
-            ai_client = get_ai_client()
+            ai_client = get_ai_client(provider='gemini')
         except Exception as e:
             print(f'AI 클라이언트 초기화 오류: {e}')
             return None
@@ -224,7 +224,7 @@ class EvaluationService:
         
         try:
             response = ai_client.chat_completion(
-                model='gpt-4o-mini',
+                model='gemini-3-flash-preview',
                 messages=[
                     {'role': 'system', 'content': system_prompt},
                     {'role': 'user', 'content': user_prompt}
