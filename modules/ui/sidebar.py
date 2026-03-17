@@ -266,7 +266,7 @@ def render_sidebar():
             person_entries = iter_person_entries()
             if person_entries:
                 st.divider()
-                st.markdown("#### 전체인원 AI 처리")
+                st.markdown("#### 기록지 AI 분석")
                 
                 st.markdown("""
                 <style>
@@ -278,7 +278,7 @@ def render_sidebar():
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("주간 상태 변화 기록 생성",
+                    if st.button("주간상태변화 분석",
                                use_container_width=True, 
                                help="전체 인원의 주간 상태변화 기록지를 일괄 생성합니다"):
                         _batch_generate_weekly_reports(person_entries)
