@@ -7,5 +7,5 @@ enableXsrfProtection = true
 
 [browser]
 gatherUsageStats = false
-serverAddress = "mcplink.co.kr"
+serverAddress = "arisa.pro"
 serverPort = 443
