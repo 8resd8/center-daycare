@@ -21,7 +21,7 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r backend/requirements.txt
 
       - name: Run tests
         run: pytest -q
@@ -29,18 +29,23 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: test
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build Docker image
+      - name: Build backend image
         run: |
-          docker build -t arisa-internal-tool:latest .
+          docker build -t arisa-backend:latest -f backend/Dockerfile .
 
-      - name: Save Docker image
+      - name: Build frontend image
         run: |
-          docker save arisa-internal-tool:latest | gzip > arisa-internal-tool.tar.gz
+          docker build -t arisa-frontend:latest ./frontend
+
+      - name: Save Docker images
+        run: |
+          docker save arisa-backend:latest | gzip > arisa-backend.tar.gz
+          docker save arisa-frontend:latest | gzip > arisa-frontend.tar.gz
 
       - name: Copy files to EC2
         uses: appleboy/scp-action@v0.1.7
@@ -48,7 +53,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "arisa-internal-tool.tar.gz,docker-compose.prod.yml"
+          source: "arisa-backend.tar.gz,arisa-frontend.tar.gz,docker-compose.prod.yml"
           target: "/home/${{ secrets.EC2_USERNAME }}/arisa"
 
       - name: Deploy to EC2
@@ -59,23 +64,24 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd /home/${{ secrets.EC2_USERNAME }}/arisa
-            
-            # env 생성
+
+            # .env 생성
             echo "${{ secrets.ENV_FILE }}" > .env
-            
+
             # Docker 이미지 로드
-            docker load < arisa-internal-tool.tar.gz
-            
-            # 기존 컨테이너 중지 및 제거
+            docker load < arisa-backend.tar.gz
+            docker load < arisa-frontend.tar.gz
+
+            # 기존 컨테이너 중지
             docker compose -f docker-compose.prod.yml down || true
-            
+
             # 새 컨테이너 시작
             docker compose -f docker-compose.prod.yml up -d
-            
-            # 이미지 파일 정리
-            rm arisa-internal-tool.tar.gz
-            
-            # 사용하지 않는 이미지 정리
+
+            # 파일 정리
+            rm -f arisa-backend.tar.gz arisa-frontend.tar.gz
+
+            # 미사용 이미지 정리
             docker image prune -f
-            
+
             echo "Deployment completed successfully!"

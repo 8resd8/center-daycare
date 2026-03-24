@@ -294,8 +294,8 @@ function CustomerForm({ data, onChange, onSave, onCancel, isSaving }: CustomerFo
           className="mt-1 w-full border border-gray-200 rounded px-2 py-1.5 text-sm"
         >
           <option value="">선택</option>
-          <option value="남">남</option>
-          <option value="여">여</option>
+          <option value="남성">남성</option>
+          <option value="여성">여성</option>
         </select>
       </div>
       <div>

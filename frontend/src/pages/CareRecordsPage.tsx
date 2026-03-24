@@ -1,7 +1,7 @@
-import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, Copy, Check } from "lucide-react";
+import { Loader2, Copy, Check, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFilterStore } from "@/store/filterStore";
 import { dailyRecordsApi } from "@/api/dailyRecords";
@@ -74,6 +74,7 @@ function calcRate(results: CheckResult[], cat: CheckCategory) {
 // ── 메인 컴포넌트 ──────────────────────────────────────────────
 export default function CareRecordsPage() {
   const { startDate, endDate, selectedCustomerId } = useFilterStore();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<MainTab>("weekly");
   const [weeklySubTab, setWeeklySubTab] = useState<WeeklySubTab>("basic");
   const [generatedReport, setGeneratedReport] = useState("");
@@ -92,19 +93,36 @@ export default function CareRecordsPage() {
     enabled: !!selectedCustomerId,
   });
 
+  // 기존 저장된 주간 보고서 자동 조회
+  const weeklyReportQueryKey = ["weekly-report", selectedCustomerId, startDate, endDate];
+  const { data: existingReports = [], isLoading: loadingReport } = useQuery({
+    queryKey: weeklyReportQueryKey,
+    queryFn: () => weeklyReportsApi.list({ customer_id: selectedCustomerId!, start_date: startDate ?? undefined, end_date: endDate ?? undefined }),
+    enabled: !!selectedCustomerId && !!startDate && !!endDate,
+  });
+  const existingReportText = existingReports[0]?.report_text ?? null;
+
+  // 기존 보고서 로드 시 textarea에 반영
+  useEffect(() => {
+    setGeneratedReport(existingReportText ?? "");
+  }, [existingReportText]);
+
   const generateMutation = useMutation({
     mutationFn: () => weeklyReportsApi.generate({ customer_id: selectedCustomerId!, start_date: startDate!, end_date: endDate! }),
-    onSuccess: (data) => { setGeneratedReport(data.report_text); toast.success("주간 보고서가 생성되었습니다."); },
+    onSuccess: async (data) => {
+      setGeneratedReport(data.report_text);
+      try {
+        await weeklyReportsApi.save(selectedCustomerId!, { customer_id: selectedCustomerId!, start_date: startDate!, end_date: endDate!, report_text: data.report_text });
+        queryClient.invalidateQueries({ queryKey: weeklyReportQueryKey });
+        toast.success("기록지가 저장되었습니다.");
+      } catch {
+        toast.error("생성은 완료됐으나 저장에 실패했습니다.");
+      }
+    },
     onError: (e: unknown) => {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "생성 실패";
       toast.error(msg);
     },
-  });
-
-  const saveMutation = useMutation({
-    mutationFn: (text: string) => weeklyReportsApi.save(selectedCustomerId!, { customer_id: selectedCustomerId!, start_date: startDate!, end_date: endDate!, report_text: text }),
-    onSuccess: () => toast.success("보고서가 저장되었습니다."),
-    onError: () => toast.error("저장 실패"),
   });
 
   const handleCopy = async () => {
@@ -181,7 +199,7 @@ export default function CareRecordsPage() {
 
       {/* 메인 탭 */}
       <div className="flex gap-2">
-        {[{ key: "weekly" as MainTab, label: "주간 상태 변화 평가" }, { key: "daily" as MainTab, label: "일일 특이사항 평가" }].map((t) => (
+        {[{ key: "weekly" as MainTab, label: "주간상태변화 평가" }, { key: "daily" as MainTab, label: "일일 특이사항 평가" }].map((t) => (
           <button key={t.key} onClick={() => setActiveTab(t.key)}
             className={cn("px-4 py-2 rounded-lg text-sm font-medium transition-colors",
               activeTab === t.key ? "bg-blue-600 text-white" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
@@ -195,14 +213,14 @@ export default function CareRecordsPage() {
         <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-gray-400" /></div>
       ) : (
         <>
-          {/* ── 주간 상태변화평가 ── */}
+          {/* ── 주간상태변화 평가 ── */}
           {activeTab === "weekly" && (
             <div className="space-y-4">
               {/* 전체인원 일괄 생성 */}
               <div className="bg-white rounded-xl border border-gray-200 p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-700">전체인원 주간 상태변화 기록지 일괄 생성</h3>
+                    <h3 className="text-sm font-semibold text-gray-700">전체인원 주간상태변화 기록지 일괄 생성</h3>
                     <p className="text-xs text-gray-400 mt-0.5">
                       현재 날짜 범위의 수급자 {customersWithRecords.length}명 보고서를 순서대로 생성·저장합니다.
                     </p>
@@ -213,7 +231,7 @@ export default function CareRecordsPage() {
                     className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 whitespace-nowrap"
                   >
                     {bulkWeeklyGenerating && <Loader2 size={14} className="animate-spin" />}
-                    전체인원 일괄 생성
+                    전체 인원 기록지 생성
                   </button>
                 </div>
                 {bulkWeeklyProgress && (
@@ -254,31 +272,33 @@ export default function CareRecordsPage() {
               {/* AI 주간 보고서 생성 (선택된 수급자) */}
               <div className="bg-white rounded-xl border border-gray-200 p-5">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-gray-700">
-                    {selectedCustomer ? `${selectedCustomer.name} 주간 상태변화 기록지 생성` : "주간 상태변화 기록지 생성"}
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-gray-700">
+                      {selectedCustomer ? `${selectedCustomer.name} 주간상태변화 기록지` : "주간상태변화 기록지"}
+                    </h3>
+                    {existingReportText && (
+                      <span className="text-xs bg-green-50 text-green-600 px-2 py-0.5 rounded-full">저장됨</span>
+                    )}
+                  </div>
                   <button
                     onClick={() => generateMutation.mutate()}
                     disabled={generateMutation.isPending || !startDate || !endDate}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
                   >
                     {generateMutation.isPending && <Loader2 size={14} className="animate-spin" />}
-                    생성하기
+                    {existingReportText ? "재생성" : "생성하기"}
                   </button>
                 </div>
-                {generatedReport ? (
+                {loadingReport ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 size={20} className="animate-spin text-gray-400" />
+                  </div>
+                ) : generatedReport ? (
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-medium text-gray-600">생성된 보고서</p>
-                      <div className="flex gap-2">
-                        <button onClick={handleCopy} className="flex items-center gap-1 text-xs px-3 py-1 border border-gray-200 rounded-lg hover:bg-gray-50">
-                          {copied ? <Check size={12} className="text-green-600" /> : <Copy size={12} />} 복사
-                        </button>
-                        <button onClick={() => saveMutation.mutate(generatedReport)} disabled={saveMutation.isPending}
-                          className="text-xs px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">
-                          저장
-                        </button>
-                      </div>
+                    <div className="flex items-center justify-end mb-2">
+                      <button onClick={handleCopy} className="flex items-center gap-1 text-xs px-3 py-1 border border-gray-200 rounded-lg hover:bg-gray-50">
+                        {copied ? <Check size={12} className="text-green-600" /> : <Copy size={12} />} 복사
+                      </button>
                     </div>
                     <textarea value={generatedReport} onChange={(e) => setGeneratedReport(e.target.value)}
                       className="w-full h-72 text-sm border border-gray-200 rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-blue-300" />
@@ -325,35 +345,7 @@ export default function CareRecordsPage() {
                   </div>
 
                   {/* 추가 정보 */}
-                  <div className="bg-white rounded-xl border border-gray-200 p-4">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3">추가 정보</h3>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-gray-50">
-                            {["날짜","목욕","아침","간호관리","응급","물리치료","향상프로그램내용"].map((h) => (
-                              <th key={h} className="border border-gray-200 px-2 py-1 text-left whitespace-nowrap">{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {records.map((r) => (
-                            <tr key={r.record_id} className="hover:bg-gray-50">
-                              <td className="border border-gray-200 px-2 py-1 whitespace-nowrap">{r.date}</td>
-                              <td className="border border-gray-200 px-2 py-1 whitespace-nowrap">
-                                {r.bath_time && r.bath_method ? `${r.bath_time} / ${r.bath_method}` : (r.bath_time ?? "-")}
-                              </td>
-                              <td className="border border-gray-200 px-2 py-1 whitespace-nowrap">{r.meal_breakfast ?? "-"}</td>
-                              <td className="border border-gray-200 px-2 py-1 max-w-[120px] truncate">{r.nursing_manage ?? "-"}</td>
-                              <td className="border border-gray-200 px-2 py-1 whitespace-nowrap">{r.emergency ?? "-"}</td>
-                              <td className="border border-gray-200 px-2 py-1 whitespace-nowrap">{r.prog_therapy ?? "-"}</td>
-                              <td className="border border-gray-200 px-2 py-1 max-w-[150px] truncate">{r.prog_enhance_detail ?? "-"}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                  <AdditionalInfoSection records={records} />
 
                   {/* 직원 평가 */}
                   {writerNames.length > 0 && records.length > 0 && (
@@ -406,7 +398,7 @@ function DataTable({ records, subTab }: { records: DailyRecord[]; subTab: Weekly
             return (
               <tr key={r.record_id} className="hover:bg-gray-50">
                 <td className="border border-gray-200 px-2 py-1 whitespace-nowrap">{r.date}</td>
-                <td className="border border-gray-200 px-2 py-1 max-w-[160px] truncate" title={r.physical_note ?? ""}>{r.physical_note ?? "-"}</td>
+                <td className="border border-gray-200 px-2 py-1 whitespace-nowrap">{r.physical_note ?? "-"}</td>
                 <td className="border border-gray-200 px-2 py-1 whitespace-nowrap">{r.hygiene_care ?? "-"}</td>
                 <td className="border border-gray-200 px-2 py-1 whitespace-nowrap">{bath || "-"}</td>
                 <td className="border border-gray-200 px-2 py-1 whitespace-nowrap">{meals || "-"}</td>
@@ -431,8 +423,7 @@ function DataTable({ records, subTab }: { records: DailyRecord[]; subTab: Weekly
         {records.map((r) => (
           <tr key={r.record_id} className="hover:bg-gray-50">
             {fields.map((f) => (
-              <td key={f.key} className={cn("border border-gray-200 px-2 py-1", f.label === "특이사항" ? "max-w-[160px] truncate" : "whitespace-nowrap")}
-                title={(r[f.key] as string) ?? ""}>
+              <td key={f.key} className="border border-gray-200 px-2 py-1 whitespace-nowrap">
                 {(r[f.key] as string) ?? "-"}
               </td>
             ))}
@@ -470,7 +461,7 @@ function CheckTable({ checkResults }: { checkResults: CheckResult[] }) {
           <thead><tr className="bg-gray-50">
             <th className="border border-gray-200 px-2 py-1 text-left whitespace-nowrap">날짜</th>
             <th className="border border-gray-200 px-2 py-1 text-left whitespace-nowrap">작성자</th>
-            {keys.map((k) => <th key={k} className="border border-gray-200 px-2 py-1 text-left whitespace-nowrap">{k}</th>)}
+            {keys.map((k) => <th key={k} className="border border-gray-200 px-2 py-1 text-center whitespace-nowrap">{k}</th>)}
           </tr></thead>
           <tbody>
             {checkResults.map((row, i) => {
@@ -478,7 +469,7 @@ function CheckTable({ checkResults }: { checkResults: CheckResult[] }) {
               return (
                 <tr key={i} className="hover:bg-gray-50">
                   <td className="border border-gray-200 px-2 py-1 whitespace-nowrap">{row.date}</td>
-                  <td className="border border-gray-200 px-2 py-1 whitespace-nowrap">{(checks.writer as string) ?? ""}</td>
+                  <td className="border border-gray-200 px-2 py-1 whitespace-nowrap text-gray-600">{(checks.writer as string) ?? ""}</td>
                   {keys.map((k) => {
                     const v = checks[k];
                     return <td key={k} className="border border-gray-200 px-2 py-1 text-center whitespace-nowrap">
@@ -491,6 +482,71 @@ function CheckTable({ checkResults }: { checkResults: CheckResult[] }) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// ── 추가 정보 섹션 (접기/펼치기) ──────────────────────────────────
+function AdditionalInfoSection({ records }: { records: DailyRecord[] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const counts: { label: string; count: number }[] = [
+    { label: "목욕", count: records.filter((r) => r.bath_time?.trim() || r.bath_method?.trim()).length },
+    { label: "아침", count: records.filter((r) => r.meal_breakfast?.trim()).length },
+    { label: "간호관리", count: records.filter((r) => r.nursing_manage?.trim()).length },
+    { label: "응급", count: records.filter((r) => r.emergency?.trim()).length },
+    { label: "물리치료", count: records.filter((r) => r.prog_therapy?.trim()).length },
+    { label: "향상프로그램", count: records.filter((r) => r.prog_enhance_detail?.trim()).length },
+  ].filter((c) => c.count > 0);
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full p-4 flex items-center justify-between hover:bg-gray-50 rounded-xl transition-colors"
+      >
+        <div className="flex items-center gap-2 flex-wrap">
+          <h3 className="text-sm font-semibold text-gray-700">추가 정보</h3>
+          {counts.length > 0 ? (
+            counts.map((c) => (
+              <span key={c.label} className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
+                {c.label} {c.count}건
+              </span>
+            ))
+          ) : (
+            <span className="text-xs text-gray-400">작성된 내용 없음</span>
+          )}
+        </div>
+        <ChevronDown size={16} className={cn("text-gray-400 transition-transform flex-shrink-0 ml-2", expanded && "rotate-180")} />
+      </button>
+      {expanded && (
+        <div className="overflow-x-auto px-4 pb-4">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="bg-gray-50">
+                {["날짜", "목욕", "아침", "간호관리", "응급", "물리치료", "향상프로그램내용"].map((h) => (
+                  <th key={h} className="border border-gray-200 px-2 py-1 text-left whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {records.map((r) => (
+                <tr key={r.record_id} className="hover:bg-gray-50">
+                  <td className="border border-gray-200 px-2 py-1 whitespace-nowrap">{r.date}</td>
+                  <td className="border border-gray-200 px-2 py-1 whitespace-nowrap">
+                    {r.bath_time && r.bath_method ? `${r.bath_time} / ${r.bath_method}` : (r.bath_time ?? "-")}
+                  </td>
+                  <td className="border border-gray-200 px-2 py-1 whitespace-nowrap">{r.meal_breakfast ?? "-"}</td>
+                  <td className="border border-gray-200 px-2 py-1 max-w-[120px] truncate">{r.nursing_manage ?? "-"}</td>
+                  <td className="border border-gray-200 px-2 py-1 whitespace-nowrap">{r.emergency ?? "-"}</td>
+                  <td className="border border-gray-200 px-2 py-1 whitespace-nowrap">{r.prog_therapy ?? "-"}</td>
+                  <td className="border border-gray-200 px-2 py-1 max-w-[150px] truncate">{r.prog_enhance_detail ?? "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

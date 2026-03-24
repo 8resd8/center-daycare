@@ -77,6 +77,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
 
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
+      let firstCustomerNames: string[] = [];
       for (const file of acceptedFiles) {
         if (!file.name.toLowerCase().endsWith(".pdf")) {
           toast.error(`${file.name}: PDF 파일만 업로드 가능합니다.`);
@@ -88,12 +89,30 @@ export default function Sidebar({ onClose }: SidebarProps) {
           await uploadApi.save(result.file_id);
           addDoc(result);
           markSaved(result.file_id);
-          await queryClient.invalidateQueries({ queryKey: ["customers-with-records"] });
+          if (firstCustomerNames.length === 0) firstCustomerNames = result.customer_names;
           toast.success(`${file.name} 저장 완료 (${result.total_records}건)`);
         } catch {
           toast.error(`${file.name} 업로드 실패`);
         } finally {
           setUploading(false);
+        }
+      }
+      // 업로드 완료 후 목록 갱신 + 첫 번째 수급자 자동 선택
+      if (firstCustomerNames.length > 0) {
+        const { startDate: sd, endDate: ed, setSelectedCustomerId: setSel } = useFilterStore.getState();
+        try {
+          const freshList = await queryClient.fetchQuery({
+            queryKey: ["customers-with-records", sd, ed],
+            queryFn: () => dailyRecordsApi.customersWithRecords({
+              start_date: sd ?? undefined,
+              end_date: ed ?? undefined,
+            }),
+            staleTime: 0,
+          });
+          const match = freshList.find((c) => firstCustomerNames.includes(c.name));
+          if (match) setSel(match.customer_id);
+        } catch {
+          await queryClient.invalidateQueries({ queryKey: ["customers-with-records"] });
         }
       }
     },
