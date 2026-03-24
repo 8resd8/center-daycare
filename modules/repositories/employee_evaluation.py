@@ -50,9 +50,10 @@ class EmployeeEvaluationRepository(BaseRepository):
     def get_evaluations_by_record(self, record_id: int) -> List[Dict]:
         """Get all employee evaluations for a specific record."""
         query = """
-            SELECT 
+            SELECT
                 ee.emp_eval_id, ee.record_id, ee.target_date, ee.category, ee.evaluation_type,
                 ee.score, ee.comment, ee.evaluation_date,
+                ee.target_user_id, ee.evaluator_user_id,
                 tu.name AS target_user_name,
                 eu.name AS evaluator_user_name
             FROM employee_evaluations ee
