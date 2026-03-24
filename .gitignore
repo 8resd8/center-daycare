@@ -60,3 +60,8 @@ frontend/dist/
 # IDE / AI tool configs
 .windsurf/
 .claude/
+# Personal notes / local-only docs
+INFRA_MIGRATION.md
+PORTFOLIO.md
+pjt.md
+프로젝트들.md
