@@ -1,18 +1,32 @@
 version: '3.8'
 
 services:
-  streamlit:
+  backend:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: arisa-streamlit
+      dockerfile: backend/Dockerfile
+    container_name: arisa-backend
     ports:
-      - "8501:8501"
+      - "8000:8000"
     volumes:
       - .:/app
-      - ./.streamlit/secrets.toml:/app/.streamlit/secrets.toml:ro
     environment:
       - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - arisa-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: arisa-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
     restart: unless-stopped
     networks:
       - arisa-network

@@ -154,12 +154,38 @@ def get_api_key(provider: str = 'gemini') -> str:
     try:
         import streamlit as st
         if hasattr(st, 'secrets'):
-            api_key = st.secrets.get(secret_key)
+            try:
+                api_key = st.secrets.get(secret_key)
+            except Exception:
+                api_key = None
             if api_key:
                 return api_key
-    except (ImportError, RuntimeError):
+    except ImportError:
         pass
-    
+
+    # secrets.toml 직접 읽기 (FastAPI/uvicorn 환경)
+    import pathlib
+    _root = pathlib.Path(__file__).parent.parent.parent
+    _candidates = [
+        _root / '.streamlit' / 'secrets.toml',
+        _root / 'backend' / '.streamlit' / 'secrets.toml',
+        pathlib.Path.home() / '.streamlit' / 'secrets.toml',
+    ]
+    for _path in _candidates:
+        if _path.exists():
+            try:
+                try:
+                    import tomllib
+                except ImportError:
+                    import tomli as tomllib  # type: ignore
+                with open(_path, 'rb') as _f:
+                    _data = tomllib.load(_f)
+                api_key = _data.get(secret_key)
+                if api_key:
+                    return api_key
+            except Exception:
+                continue
+
     raise ValueError(error_msg)
 
 

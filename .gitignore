@@ -54,3 +54,9 @@ desktop.ini
 *.pem
 
 node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# IDE / AI tool configs
+.windsurf/
+.claude/

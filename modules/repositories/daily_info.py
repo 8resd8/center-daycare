@@ -336,16 +336,21 @@ class DailyInfoRepository(BaseRepository):
     def get_customer_records(self, customer_id: int, start_date=None, end_date=None) -> List[Dict]:
         """Get all daily records for a customer within date range."""
         query = """
-            SELECT 
-                di.record_id, di.date, di.total_service_time,
-                dp.note AS physical_note, dp.writer_name AS writer_physical,
+            SELECT
+                di.record_id, di.customer_id, di.date,
+                di.start_time, di.end_time, di.total_service_time,
+                di.transport_service, di.transport_vehicles,
+                dp.hygiene_care, dp.bath_time, dp.bath_method,
                 dp.meal_breakfast, dp.meal_lunch, dp.meal_dinner,
-                dp.toilet_care, dp.bath_time,
-                dn.bp_temp,
-                dr.prog_therapy,
-                dc.note AS cognitive_note, dc.writer_name AS writer_cognitive,
-                dn.note AS nursing_note, dn.writer_name AS writer_nursing,
-                dr.note AS functional_note, dr.writer_name AS writer_recovery
+                dp.toilet_care, dp.mobility_care,
+                dp.note AS physical_note, dp.writer_name AS writer_phy,
+                dc.cog_support, dc.comm_support,
+                dc.note AS cognitive_note, dc.writer_name AS writer_cog,
+                dn.bp_temp, dn.health_manage, dn.nursing_manage, dn.emergency,
+                dn.note AS nursing_note, dn.writer_name AS writer_nur,
+                dr.prog_basic, dr.prog_activity, dr.prog_cognitive,
+                dr.prog_therapy, dr.prog_enhance_detail,
+                dr.note AS functional_note, dr.writer_name AS writer_func
             FROM daily_infos di
             LEFT JOIN daily_physicals dp ON dp.record_id = di.record_id
             LEFT JOIN daily_cognitives dc ON dc.record_id = di.record_id

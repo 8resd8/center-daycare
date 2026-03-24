@@ -56,15 +56,45 @@ def get_db_config() -> Dict[str, Any]:
     # Streamlit secrets에서 설정 확인
     try:
         import streamlit as st
-        if hasattr(st, 'secrets') and 'mysql' in st.secrets:
-            config = dict(st.secrets["mysql"])
-            # KST 타임존 설정 추가 (없는 경우에만)
-            if 'time_zone' not in config:
-                config['time_zone'] = '+09:00'
-            return config
-    except (ImportError, RuntimeError):
+        if hasattr(st, 'secrets'):
+            try:
+                has_mysql = 'mysql' in st.secrets
+            except Exception:
+                has_mysql = False
+            if has_mysql:
+                config = dict(st.secrets["mysql"])
+                # KST 타임존 설정 추가 (없는 경우에만)
+                if 'time_zone' not in config:
+                    config['time_zone'] = '+09:00'
+                return config
+    except ImportError:
         pass
-    
+
+    # secrets.toml 직접 읽기 (FastAPI/uvicorn 환경 등 Streamlit 런타임 없을 때)
+    import pathlib
+    _root = pathlib.Path(__file__).parent.parent
+    _secrets_candidates = [
+        _root / '.streamlit' / 'secrets.toml',
+        _root / 'backend' / '.streamlit' / 'secrets.toml',
+        pathlib.Path.home() / '.streamlit' / 'secrets.toml',
+    ]
+    for _path in _secrets_candidates:
+        if _path.exists():
+            try:
+                try:
+                    import tomllib
+                except ImportError:
+                    import tomli as tomllib  # type: ignore
+                with open(_path, 'rb') as _f:
+                    _data = tomllib.load(_f)
+                if 'mysql' in _data:
+                    config = dict(_data['mysql'])
+                    if 'time_zone' not in config:
+                        config['time_zone'] = '+09:00'
+                    return config
+            except Exception:
+                continue
+
     raise RuntimeError("Database configuration not found. Set environment variables or Streamlit secrets.")
 
 
