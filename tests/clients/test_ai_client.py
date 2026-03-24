@@ -234,8 +234,9 @@ class TestGetApiKey:
 
         with patch.dict(os.environ, {}, clear=True):
             with patch.dict(sys.modules, {'streamlit': mock_st}):
-                with pytest.raises(ValueError):
-                    get_api_key(provider='gemini')
+                with patch('pathlib.Path.exists', return_value=False):
+                    with pytest.raises(ValueError):
+                        get_api_key(provider='gemini')
 
     def test_get_api_key_openai_raises_when_missing(self):
         """OpenAI API 키가 없으면 ValueError 발생"""
@@ -245,8 +246,9 @@ class TestGetApiKey:
 
         with patch.dict(os.environ, {}, clear=True):
             with patch.dict(sys.modules, {'streamlit': mock_st}):
-                with pytest.raises(ValueError):
-                    get_api_key(provider='openai')
+                with patch('pathlib.Path.exists', return_value=False):
+                    with pytest.raises(ValueError):
+                        get_api_key(provider='openai')
 
     def test_get_api_key_env_takes_priority_over_secrets(self):
         """환경변수가 Streamlit secrets보다 우선순위가 높다"""
@@ -270,8 +272,9 @@ class TestGetApiKey:
         """streamlit ImportError 시 ValueError 발생"""
         with patch.dict(os.environ, {}, clear=True):
             with patch.dict(sys.modules, {'streamlit': None}):
-                with pytest.raises((ValueError, ImportError)):
-                    get_api_key(provider='gemini')
+                with patch('pathlib.Path.exists', return_value=False):
+                    with pytest.raises((ValueError, ImportError)):
+                        get_api_key(provider='gemini')
 
 
 class TestGetAiClientWithoutStreamlit:
