@@ -20,6 +20,7 @@ class CareRecordParser:
         self._debug_customer = None  # 특정 고객만 디버그
         self._basic_info = {}
         self._personal_info = {}
+        self._year = None  # 현재 그룹에서 추출한 연도
     
     def _should_debug(self):
         """강순례 고객에 대해서만 디버그 출력"""
@@ -110,6 +111,7 @@ class CareRecordParser:
 
                 self._personal_info = self._parse_personal_info(group_pages)
                 self._basic_info = self._parse_basic_info_block(group_pages)
+                self._year = self._extract_year(group_pages)
 
                 for page in group_pages:
                     self._parse_page(page)
@@ -175,8 +177,8 @@ class CareRecordParser:
             # Check if this is an appendix page (has date/content table)
             is_appendix_page = False
             if "날짜" in text and "내용" in text:
-                # Check for date patterns like 2025.12.02
-                if re.search(r'2025\.\d{2}\.\d{2}', text):
+                # Check for date patterns like 2026.12.02 (any year)
+                if re.search(r'\d{4}\.\d{2}\.\d{2}', text):
                     is_appendix_page = True
             
             # Also check if this page contains a customer name without being a header
@@ -817,7 +819,8 @@ class CareRecordParser:
             clean = re.sub(r'\(.*\)', '', str(date_str)).replace('.', '-').strip()
             if '/' in clean:
                 md = clean.split('/')
-                return f"2025-{int(md[0]):02d}-{int(md[1]):02d}"
+                year = self._year or self._guess_year()
+                return f"{year}-{int(md[0]):02d}-{int(md[1]):02d}"
             return clean
         except: return None
 
@@ -827,6 +830,52 @@ class CareRecordParser:
                 if cell and len(str(cell)) > 1 and "수급자" not in str(cell): return str(cell).replace(" ", "")
             return "미상"
         except: return "미상"
+
+    def _extract_year(self, pages):
+        """PDF 페이지 텍스트에서 기록 연도를 추출한다.
+
+        탐색 순서:
+        1. '2026년' 같은 명시적 연도 표기
+        2. 별지 날짜 (YYYY.MM.DD 또는 YYYY-MM-DD 형식)
+        3. 테이블 셀의 전체 날짜 형식
+        """
+        for page in pages:
+            try:
+                text = page.extract_text() or ""
+            except Exception:
+                continue
+
+            # 1. 'YYYY년' 형식으로 명시된 연도
+            m = re.search(r'(20\d{2})년', text)
+            if m:
+                return m.group(1)
+
+            # 2. YYYY.MM.DD 또는 YYYY-MM-DD 패턴
+            m = re.search(r'(20\d{2})[.\-]\d{2}[.\-]\d{2}', text)
+            if m:
+                return m.group(1)
+
+        # 테이블 셀에서도 탐색
+        for page in pages:
+            try:
+                tables = page.extract_tables()
+            except Exception:
+                continue
+            for table in (tables or []):
+                for row in (table or []):
+                    for cell in (row or []):
+                        if not cell:
+                            continue
+                        m = re.search(r'(20\d{2})[.\-]\d{2}[.\-]\d{2}', str(cell))
+                        if m:
+                            return m.group(1)
+
+        return None
+
+    def _guess_year(self):
+        """연도를 추출하지 못했을 때 현재 연도를 반환한다."""
+        import datetime
+        return str(datetime.date.today().year)
 
     def _is_placeholder(self, text):
         clean = str(text).replace(" ", "")

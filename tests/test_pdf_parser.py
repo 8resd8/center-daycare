@@ -22,7 +22,7 @@ from modules.pdf_parser import CareRecordParser
 # 헬퍼: 파서 인스턴스 생성 (PDF 없이)
 # ───────────────────────────────────────────────────────────────
 
-def make_parser():
+def make_parser(year=None):
     """파서 인스턴스를 PDF 없이 생성."""
     parser = CareRecordParser.__new__(CareRecordParser)
     parser.pdf_file = None
@@ -32,6 +32,7 @@ def make_parser():
     parser._debug_customer = None
     parser._basic_info = {}
     parser._personal_info = {}
+    parser._year = year
     return parser
 
 
@@ -224,13 +225,13 @@ class TestCleanDate:
     """
     비즈니스 규칙:
       - 'YYYY.MM.DD' → 'YYYY-MM-DD'
-      - 'MM/DD' → '2025-MM-DD' (현재 연도 고정)
+      - 'MM/DD' → '{_year}-MM-DD' (_year가 설정된 경우) 또는 현재 연도 사용
       - 괄호 안 요일 텍스트 제거 (예: '01(월)')
       - 변환 실패 → None
     """
 
     def setup_method(self):
-        self.parser = make_parser()
+        self.parser = make_parser(year="2025")
 
     def test_dot_format_converted_to_dash(self):
         assert self.parser._clean_date("2025.11.14") == "2025-11-14"
@@ -238,10 +239,16 @@ class TestCleanDate:
     def test_dash_format_unchanged(self):
         assert self.parser._clean_date("2025-11-14") == "2025-11-14"
 
-    def test_slash_format_becomes_full_date(self):
-        # MM/DD 형식은 2025년으로 완성
+    def test_slash_format_uses_extracted_year(self):
+        # MM/DD 형식은 _year에서 추출한 연도로 완성
         result = self.parser._clean_date("11/14")
         assert result == "2025-11-14"
+
+    def test_slash_format_different_year(self):
+        # 2026년 PDF의 경우 2026년으로 완성
+        self.parser._year = "2026"
+        result = self.parser._clean_date("11/14")
+        assert result == "2026-11-14"
 
     def test_single_digit_month_padded(self):
         result = self.parser._clean_date("1/5")
