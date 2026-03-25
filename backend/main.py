@@ -9,6 +9,10 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
+# .env 파일 로드 (Streamlit secrets 없이 환경변수로 운영 시)
+from dotenv import load_dotenv
+load_dotenv(ROOT_DIR / ".env")
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
