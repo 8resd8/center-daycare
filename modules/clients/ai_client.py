@@ -169,8 +169,11 @@ def get_api_key(provider: str = 'gemini') -> str:
     _candidates = [
         _root / '.streamlit' / 'secrets.toml',
         _root / 'backend' / '.streamlit' / 'secrets.toml',
-        pathlib.Path.home() / '.streamlit' / 'secrets.toml',
     ]
+    try:
+        _candidates.append(pathlib.Path.home() / '.streamlit' / 'secrets.toml')
+    except RuntimeError:
+        pass
     for _path in _candidates:
         if _path.exists():
             try:
