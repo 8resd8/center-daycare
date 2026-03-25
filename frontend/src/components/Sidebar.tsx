@@ -34,7 +34,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
   const location = useLocation();
   const isRecordsPage = location.pathname === "/";
 
-  const { addDoc, markSaved, uploadedDocs } = useDocumentStore();
+  const { addDoc, markSaved, removeDoc, uploadedDocs } = useDocumentStore();
   const {
     startDate, endDate,
     setDateRange, setThisMonth, setLastMonth,
@@ -88,7 +88,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
           const result = await uploadApi.upload(file);
           await uploadApi.save(result.file_id);
           addDoc(result);
-          markSaved(result.file_id);
+          removeDoc(result.file_id);
           if (firstCustomerNames.length === 0) firstCustomerNames = result.customer_names;
           toast.success(`${file.name} 저장 완료 (${result.total_records}건)`);
         } catch {
@@ -116,7 +116,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
         }
       }
     },
-    [addDoc, markSaved, queryClient]
+    [addDoc, removeDoc, queryClient]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -132,6 +132,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
       markSaved(file_id);
       await queryClient.invalidateQueries({ queryKey: ["customers-with-records"] });
       toast.success(res.message);
+      setTimeout(() => removeDoc(file_id), 1500);
     } catch {
       toast.error("DB 저장 실패");
     } finally {

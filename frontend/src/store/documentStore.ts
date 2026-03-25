@@ -57,15 +57,18 @@ export const useDocumentStore = create<DocumentState>()(
     {
       name: "arisa-documents",
       // records는 용량이 크고 DB에 저장됐으므로 제외 — 메타 정보만 유지
+      // 저장 완료된 항목은 로드 시 제거 (새로고침 후에도 남지 않도록)
       partialize: (state) => ({
-        uploadedDocs: state.uploadedDocs.map((doc) => ({
-          file_id: doc.file_id,
-          filename: doc.filename,
-          total_records: doc.total_records,
-          customer_names: doc.customer_names,
-          records: [] as Record<string, unknown>[],
-          saved: doc.saved,
-        })),
+        uploadedDocs: state.uploadedDocs
+          .filter((doc) => !doc.saved)
+          .map((doc) => ({
+            file_id: doc.file_id,
+            filename: doc.filename,
+            total_records: doc.total_records,
+            customer_names: doc.customer_names,
+            records: [] as Record<string, unknown>[],
+            saved: false,
+          })),
         activeFileId: state.activeFileId,
       }),
     }
