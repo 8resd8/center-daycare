@@ -83,6 +83,12 @@ def login(
             needs_migration = True
 
     if not verified:
+        # 3차: 평문 레거시 검증 (초기 데이터 마이그레이션용)
+        if body.password == stored_hash:
+            verified = True
+            needs_migration = True
+
+    if not verified:
         raise HTTPException(status_code=401, detail=_SAME_CREDENTIALS_MSG)
 
     # SHA256 → bcrypt 자동 마이그레이션
