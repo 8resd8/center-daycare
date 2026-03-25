@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 from datetime import date
 
-from backend.dependencies import get_weekly_status_repo, get_report_service, get_current_user
+from backend.dependencies import get_weekly_status_repo, get_report_service, get_current_user, require_admin
 from backend.schemas.weekly_reports import (
     WeeklyReportResponse,
     WeeklyReportGenerateRequest,
@@ -49,6 +49,7 @@ def generate_weekly_report(
     body: WeeklyReportGenerateRequest,
     report_service: ReportService = Depends(get_report_service),
     weekly_repo: WeeklyStatusRepository = Depends(get_weekly_status_repo),
+    _: dict = Depends(require_admin),
 ):
     """AI 주간 보고서 생성"""
     from modules.repositories.customer import CustomerRepository
@@ -90,6 +91,7 @@ def save_weekly_report(
     customer_id: int,
     body: WeeklyReportSaveRequest,
     repo: WeeklyStatusRepository = Depends(get_weekly_status_repo),
+    _: dict = Depends(require_admin),
 ):
     repo.save_weekly_status(
         customer_id=customer_id,

@@ -5,7 +5,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from typing import Dict, List
 import io
 
-from backend.dependencies import get_daily_info_repo, get_current_user
+from backend.dependencies import get_daily_info_repo, get_current_user, require_admin
 from modules.repositories.daily_info import DailyInfoRepository
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
@@ -17,6 +17,7 @@ _parsed_cache: Dict[str, List[dict]] = {}
 @router.post("/upload")
 async def upload_pdf(
     file: UploadFile = File(...),
+    _: dict = Depends(require_admin),
 ):
     """PDF 파싱 → 메모리 보관. file_id 반환."""
     if not file.filename or not file.filename.lower().endswith(".pdf"):
@@ -54,6 +55,7 @@ async def upload_pdf(
 def save_parsed_data(
     file_id: str,
     repo: DailyInfoRepository = Depends(get_daily_info_repo),
+    _: dict = Depends(require_admin),
 ):
     """파싱된 데이터를 DB에 저장"""
     records = _parsed_cache.get(file_id)

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from typing import List, Optional
 
-from backend.dependencies import get_customer_repo, get_current_user
+from backend.dependencies import get_customer_repo, get_current_user, require_admin
 from backend.encryption import apply_customer_mask, is_admin
 from backend.schemas.customers import CustomerCreate, CustomerUpdate, CustomerResponse
 from modules.repositories.customer import CustomerRepository
@@ -64,7 +64,7 @@ def create_customer(
     request: Request,
     body: CustomerCreate,
     repo: CustomerRepository = Depends(get_customer_repo),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_admin),
 ):
     customer_id = repo.create_customer(
         name=body.name,
@@ -91,7 +91,7 @@ def update_customer(
     customer_id: int,
     body: CustomerUpdate,
     repo: CustomerRepository = Depends(get_customer_repo),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_admin),
 ):
     repo.update_customer(
         customer_id=customer_id,
@@ -120,7 +120,7 @@ def delete_customer(
     request: Request,
     customer_id: int,
     repo: CustomerRepository = Depends(get_customer_repo),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_admin),
 ):
     affected = repo.delete_customer(customer_id)
     if not affected:

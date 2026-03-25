@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 from datetime import date
 
-from backend.dependencies import get_daily_info_repo, get_current_user
+from backend.dependencies import get_daily_info_repo, get_current_user, require_admin
 from backend.encryption import apply_customer_mask, is_admin
 from backend.schemas.daily_records import DailyRecordSummary, CustomerWithRecords
 from modules.repositories.daily_info import DailyInfoRepository
@@ -76,5 +76,6 @@ def get_daily_record(
 def delete_daily_record(
     record_id: int,
     repo: DailyInfoRepository = Depends(get_daily_info_repo),
+    _: dict = Depends(require_admin),
 ):
     repo.delete_daily_record(record_id)

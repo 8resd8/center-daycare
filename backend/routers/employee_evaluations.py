@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 
-from backend.dependencies import get_employee_evaluation_repo, get_current_user
+from backend.dependencies import get_employee_evaluation_repo, get_current_user, require_admin
 from backend.schemas.employee_evaluations import (
     EmployeeEvaluationCreate,
     EmployeeEvaluationUpdate,
@@ -33,6 +33,7 @@ def get_employee_evaluations(
 def create_employee_evaluation(
     body: EmployeeEvaluationCreate,
     repo: EmployeeEvaluationRepository = Depends(get_employee_evaluation_repo),
+    _: dict = Depends(require_admin),
 ):
     # 기존 평가 확인
     if body.record_id:
@@ -81,6 +82,7 @@ def update_employee_evaluation(
     emp_eval_id: int,
     body: EmployeeEvaluationUpdate,
     repo: EmployeeEvaluationRepository = Depends(get_employee_evaluation_repo),
+    _: dict = Depends(require_admin),
 ):
     affected = repo.update_evaluation(
         emp_eval_id=emp_eval_id,
@@ -101,6 +103,7 @@ def update_employee_evaluation(
 def delete_employee_evaluation(
     emp_eval_id: int,
     repo: EmployeeEvaluationRepository = Depends(get_employee_evaluation_repo),
+    _: dict = Depends(require_admin),
 ):
     affected = repo.delete_evaluation(emp_eval_id)
     if not affected:

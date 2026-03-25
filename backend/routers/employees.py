@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from passlib.context import CryptContext
 
-from backend.dependencies import get_user_repo, get_current_user
+from backend.dependencies import get_user_repo, get_current_user, require_admin
 from backend.encryption import apply_employee_mask, is_admin
 from backend.schemas.employees import EmployeeCreate, EmployeeUpdate, EmployeeResponse
 from modules.repositories.user import UserRepository
@@ -67,7 +67,7 @@ def create_employee(
     request: Request,
     body: EmployeeCreate,
     repo: UserRepository = Depends(get_user_repo),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_admin),
 ):
     hashed_password = _pwd_context.hash(body.password)
     user_id = repo.create_user(
@@ -100,7 +100,7 @@ def update_employee(
     user_id: int,
     body: EmployeeUpdate,
     repo: UserRepository = Depends(get_user_repo),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_admin),
 ):
     repo.update_user(
         user_id=user_id,
@@ -132,7 +132,7 @@ def soft_delete_employee(
     request: Request,
     user_id: int,
     repo: UserRepository = Depends(get_user_repo),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_admin),
 ):
     """퇴사 처리 (soft delete)"""
     affected = repo.soft_delete_user(user_id)

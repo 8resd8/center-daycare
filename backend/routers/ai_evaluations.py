@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 
-from backend.dependencies import get_ai_evaluation_repo, get_evaluation_service, get_current_user
+from backend.dependencies import get_ai_evaluation_repo, get_evaluation_service, get_current_user, require_admin
 from backend.schemas.ai_evaluations import AiEvaluationResponse, AiEvaluateRequest
 from modules.repositories.ai_evaluation import AiEvaluationRepository
 from modules.services.daily_report_service import EvaluationService
@@ -21,6 +21,7 @@ def get_ai_evaluations(
 def evaluate_record(
     body: AiEvaluateRequest,
     service: EvaluationService = Depends(get_evaluation_service),
+    _: dict = Depends(require_admin),
 ):
     """특이사항 AI 평가 실행"""
     result = service.process_daily_note_evaluation(
@@ -36,6 +37,7 @@ def evaluate_record(
 def evaluate_full_record(
     record_id: int,
     service: EvaluationService = Depends(get_evaluation_service),
+    _: dict = Depends(require_admin),
 ):
     """특정 record의 신체/인지 특이사항 전체 AI 평가"""
     from modules.db_connection import db_query

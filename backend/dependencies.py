@@ -3,7 +3,7 @@
 import os
 from typing import Optional
 
-from fastapi import Cookie, HTTPException
+from fastapi import Cookie, Depends, HTTPException
 from jose import jwt, JWTError
 
 from modules.repositories.customer import CustomerRepository
@@ -60,3 +60,10 @@ def get_current_user(access_token: Optional[str] = Cookie(None)) -> dict:
         return payload
     except JWTError:
         raise HTTPException(status_code=401, detail="인증이 필요합니다.")
+
+
+def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
+    """ADMIN 역할만 허용. 그 외 403 반환."""
+    if str(current_user.get("role", "")).upper() != "ADMIN":
+        raise HTTPException(status_code=403, detail="관리자만 접근할 수 있습니다.")
+    return current_user
