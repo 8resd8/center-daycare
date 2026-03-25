@@ -85,10 +85,11 @@ class TestCreateEmployee:
         }
         client.post("/api/employees", json=payload)
         call_kwargs = mock_repo.create_user.call_args.kwargs
+        hashed = call_kwargs["password"]
         # 해시된 비밀번호 = 평문과 달라야 함
-        assert call_kwargs["password"] != "plaintext"
-        # sha256 hex digest = 64자
-        assert len(call_kwargs["password"]) == 64
+        assert hashed != "plaintext"
+        # bcrypt 해시 형식 확인 ($2b$ 접두사)
+        assert hashed.startswith("$2b$")
 
 
 class TestUpdateEmployee:
