@@ -24,9 +24,9 @@ class ReportService:
         input_content = self._format_input_data(customer_name, date_range, analysis_payload)
         
         try:
-            ai_client = get_ai_client(provider='openai')
+            ai_client = get_ai_client(provider='gemini')
             response = ai_client.chat_completion(
-                model="gpt-4o-mini",
+                model="gemini-2.5-flash-preview-04-17",
                 messages=[
                     {"role": "system", "content": WEEKLY_WRITER_SYSTEM_PROMPT},
                     {"role": "user", "content": input_content},

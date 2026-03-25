@@ -222,7 +222,7 @@ class EvaluationService:
         
         try:
             response = ai_client.chat_completion(
-                model='gemini-3-flash-preview',
+                model='gemini-2.5-flash-preview-04-17',
                 messages=[
                     {'role': 'system', 'content': system_prompt},
                     {'role': 'user', 'content': user_prompt}

@@ -111,7 +111,7 @@ class GeminiClient(BaseAIClient):
         }
         
         gemini_model = genai.GenerativeModel(
-            model_name='gemini-3-flash-preview',
+            model_name=model,
             system_instruction=system_instruction,
             generation_config=generation_config
         )

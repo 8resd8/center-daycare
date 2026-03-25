@@ -111,8 +111,8 @@ class TestReportService:
 
         assert result == "보고서 내용"
 
-    def test_generate_weekly_report_uses_openai(self, service, date_range, sample_payload):
-        """주간 보고서는 OpenAI 클라이언트를 사용한다"""
+    def test_generate_weekly_report_uses_gemini(self, service, date_range, sample_payload):
+        """주간 보고서는 Gemini 클라이언트를 사용한다"""
         mock_client = MagicMock()
         mock_response = MagicMock()
         mock_response.choices[0].message.content = "보고서"
@@ -126,7 +126,7 @@ class TestReportService:
                 analysis_payload=sample_payload
             )
 
-        mock_get_client.assert_called_once_with(provider='openai')
+        mock_get_client.assert_called_once_with(provider='gemini')
 
     # ========== _format_input_data 테스트 ==========
 
