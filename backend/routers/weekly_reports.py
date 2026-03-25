@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 from datetime import date
 
-from backend.dependencies import get_weekly_status_repo, get_report_service
+from backend.dependencies import get_weekly_status_repo, get_report_service, get_current_user
 from backend.schemas.weekly_reports import (
     WeeklyReportResponse,
     WeeklyReportGenerateRequest,
@@ -12,7 +12,7 @@ from modules.repositories.weekly_status import WeeklyStatusRepository
 from modules.services.weekly_report_service import ReportService
 from modules.weekly_data_analyzer import compute_weekly_status
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 @router.get("/weekly-reports", response_model=List[WeeklyReportResponse])

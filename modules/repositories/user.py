@@ -140,3 +140,20 @@ class UserRepository(BaseRepository):
             WHERE user_id = %s
         """
         return self._execute_query_one(query, (user_id,))
+
+    def find_by_username(self, username: str) -> Optional[Dict[str, Any]]:
+        """로그인 전용 — password, username, role 컬럼 포함하여 조회 (퇴사자 제외)."""
+        query = """
+            SELECT user_id, username, password, name, role, work_status
+            FROM users
+            WHERE username = %s AND work_status != '퇴사'
+        """
+        return self._execute_query_one(query, (username,))
+
+    def update_password(self, user_id: int, hashed_password: str) -> int:
+        """비밀번호 해시 업데이트 (SHA256 → bcrypt 자동 마이그레이션용)."""
+        query = """
+            UPDATE users SET password = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = %s
+        """
+        return self._execute_transaction(query, (hashed_password, user_id))

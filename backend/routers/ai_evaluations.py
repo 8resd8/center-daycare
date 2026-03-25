@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 
-from backend.dependencies import get_ai_evaluation_repo, get_evaluation_service
+from backend.dependencies import get_ai_evaluation_repo, get_evaluation_service, get_current_user
 from backend.schemas.ai_evaluations import AiEvaluationResponse, AiEvaluateRequest
 from modules.repositories.ai_evaluation import AiEvaluationRepository
 from modules.services.daily_report_service import EvaluationService
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 @router.get("/ai-evaluations", response_model=List[AiEvaluationResponse])

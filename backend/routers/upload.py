@@ -5,10 +5,10 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from typing import Dict, List
 import io
 
-from backend.dependencies import get_daily_info_repo
+from backend.dependencies import get_daily_info_repo, get_current_user
 from modules.repositories.daily_info import DailyInfoRepository
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 # 메모리 임시 저장소 (파싱된 결과)
 _parsed_cache: Dict[str, List[dict]] = {}

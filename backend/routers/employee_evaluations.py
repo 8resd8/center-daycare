@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 
-from backend.dependencies import get_employee_evaluation_repo
+from backend.dependencies import get_employee_evaluation_repo, get_current_user
 from backend.schemas.employee_evaluations import (
     EmployeeEvaluationCreate,
     EmployeeEvaluationUpdate,
@@ -10,7 +10,7 @@ from backend.schemas.employee_evaluations import (
 )
 from modules.repositories.employee_evaluation import EmployeeEvaluationRepository
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 @router.get("/employee-evaluations/users", response_model=List[UserDropdownItem])
