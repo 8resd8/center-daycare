@@ -1,8 +1,18 @@
 """Pytest fixtures for testing without database and external dependencies."""
 
+import os
 import pytest
 from unittest.mock import MagicMock, patch
 from typing import Dict, List, Optional, Any
+
+# Fernet 테스트 키 (테스트 전용 — 실제 운영 키와 무관)
+_TEST_ENCRYPTION_KEY = "iW496e8pcXRPsReQUHwKotJO_EivwvokoLdwm_6YkZQ="
+
+
+@pytest.fixture(autouse=True)
+def set_test_encryption_key(monkeypatch):
+    """테스트 환경에서 ENCRYPTION_KEY 환경변수 자동 설정."""
+    monkeypatch.setenv("ENCRYPTION_KEY", _TEST_ENCRYPTION_KEY)
 
 
 class MockCursor:

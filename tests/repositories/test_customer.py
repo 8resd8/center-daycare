@@ -50,15 +50,23 @@ class TestCustomerRepository:
         mock_execute_query.assert_called_once()
     
     def test_list_customers_with_keyword(self, repo, mock_execute_query, sample_customer_data):
-        """키워드로 고객 검색"""
+        """키워드로 고객 검색 (전체 조회 후 Python 필터링)."""
         mock_execute_query.return_value = [sample_customer_data]
-        
+
         result = repo.list_customers(keyword='홍')
-        
+
         assert len(result) == 1
+        # 암호화 이후 SQL LIKE 대신 Python 필터링을 사용하므로
+        # _execute_query는 파라미터 없이 한 번만 호출됨
         mock_execute_query.assert_called_once()
-        call_args = mock_execute_query.call_args
-        assert '%홍%' in call_args[0][1]
+
+    def test_list_customers_with_keyword_no_match(self, repo, mock_execute_query, sample_customer_data):
+        """매칭 없는 키워드 검색 시 빈 목록 반환."""
+        mock_execute_query.return_value = [sample_customer_data]
+
+        result = repo.list_customers(keyword='없는이름')
+
+        assert result == []
     
     def test_list_customers_empty_result(self, repo, mock_execute_query):
         """고객이 없는 경우"""
@@ -152,51 +160,58 @@ class TestCustomerRepository:
         assert result == 0
 
     # ========== find_by_name 테스트 ==========
-    
-    def test_find_by_name_exists(self, repo, mock_execute_query_one, sample_customer_data):
+    # 암호화 이후 find_by_name/find_by_recognition_no는
+    # _execute_query(전체 조회) + Python 필터링으로 동작
+
+    def test_find_by_name_exists(self, repo, mock_execute_query, sample_customer_data):
         """이름으로 고객 검색 - 존재"""
-        mock_execute_query_one.return_value = sample_customer_data
-        
+        mock_execute_query.return_value = [sample_customer_data]
+
         result = repo.find_by_name('홍길동')
-        
+
         assert result is not None
         assert result['name'] == '홍길동'
-    
-    def test_find_by_name_not_exists(self, repo, mock_execute_query_one):
+
+    def test_find_by_name_not_exists(self, repo, mock_execute_query, sample_customer_data):
         """이름으로 고객 검색 - 존재하지 않음"""
-        mock_execute_query_one.return_value = None
-        
+        mock_execute_query.return_value = [sample_customer_data]
+
         result = repo.find_by_name('없는이름')
-        
+
         assert result is None
 
     # ========== find_by_recognition_no 테스트 ==========
-    
-    def test_find_by_recognition_no_exists(self, repo, mock_execute_query_one, sample_customer_data):
+
+    def test_find_by_recognition_no_exists(self, repo, mock_execute_query, sample_customer_data):
         """인정번호로 고객 검색 - 존재"""
-        mock_execute_query_one.return_value = sample_customer_data
-        
+        mock_execute_query.return_value = [sample_customer_data]
+
         result = repo.find_by_recognition_no('L1234567890')
-        
+
         assert result is not None
         assert result['recognition_no'] == 'L1234567890'
 
     # ========== get_or_create 테스트 ==========
-    
-    def test_get_or_create_existing_customer(self, repo, mock_execute_query_one, mock_execute_transaction, sample_customer_data):
+
+    def test_get_or_create_existing_customer(
+        self, repo, mock_execute_query, mock_execute_transaction,
+        mock_execute_transaction_lastrowid, sample_customer_data
+    ):
         """기존 고객이 있으면 업데이트 후 ID 반환"""
-        mock_execute_query_one.return_value = sample_customer_data
+        mock_execute_query.return_value = [sample_customer_data]
         mock_execute_transaction.return_value = 1
-        
+
         result = repo.get_or_create(name='홍길동', birth_date='1950-01-01')
-        
+
         assert result == 1
-    
-    def test_get_or_create_new_customer(self, repo, mock_execute_query_one, mock_execute_transaction_lastrowid):
+
+    def test_get_or_create_new_customer(
+        self, repo, mock_execute_query, mock_execute_transaction_lastrowid
+    ):
         """새 고객이면 생성 후 ID 반환"""
-        mock_execute_query_one.return_value = None
+        mock_execute_query.return_value = []
         mock_execute_transaction_lastrowid.return_value = 2
-        
+
         result = repo.get_or_create(name='새고객', birth_date='1970-01-01')
-        
+
         assert result == 2

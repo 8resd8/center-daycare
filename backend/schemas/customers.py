@@ -1,33 +1,26 @@
 from pydantic import BaseModel, field_validator
-from typing import Optional
+from typing import Optional, Union
 from datetime import date
-
-
-def _parse_date(v):
-    if v is None or isinstance(v, date):
-        return v
-    if isinstance(v, str):
-        try:
-            parts = v.split('-')
-            if len(parts) == 3:
-                return date(int(parts[0]), int(parts[1]), int(parts[2]))
-        except (ValueError, AttributeError):
-            pass
-    return v
 
 
 class CustomerBase(BaseModel):
     name: str
-    birth_date: Optional[date] = None
+    birth_date: Optional[str] = None   # 암호화/마스킹 후 문자열; date 객체도 자동 변환
     gender: Optional[str] = None
     recognition_no: Optional[str] = None
     benefit_start_date: Optional[date] = None
     grade: Optional[str] = None
 
-    @field_validator('birth_date', 'benefit_start_date', mode='before')
+    @field_validator("birth_date", mode="before")
     @classmethod
-    def parse_date_fields(cls, v):
-        return _parse_date(v)
+    def coerce_birth_date(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, date):
+            return v.isoformat()
+        return str(v)
+
+    model_config = {"populate_by_name": True}
 
 
 class CustomerCreate(CustomerBase):

@@ -3,23 +3,10 @@ from typing import Optional
 from datetime import date
 
 
-def _parse_date(v):
-    if v is None or isinstance(v, date):
-        return v
-    if isinstance(v, str):
-        try:
-            parts = v.split('-')
-            if len(parts) == 3:
-                return date(int(parts[0]), int(parts[1]), int(parts[2]))
-        except (ValueError, AttributeError):
-            pass
-    return v
-
-
 class EmployeeBase(BaseModel):
     name: str
     gender: Optional[str] = None
-    birth_date: Optional[date] = None
+    birth_date: Optional[str] = None   # 암호화/마스킹 후 문자열; date 객체도 자동 변환
     work_status: str = "재직"
     job_type: Optional[str] = None
     hire_date: Optional[date] = None
@@ -27,10 +14,16 @@ class EmployeeBase(BaseModel):
     license_name: Optional[str] = None
     license_date: Optional[date] = None
 
-    @field_validator('birth_date', 'hire_date', 'resignation_date', 'license_date', mode='before')
+    @field_validator("birth_date", mode="before")
     @classmethod
-    def parse_date_fields(cls, v):
-        return _parse_date(v)
+    def coerce_birth_date(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, date):
+            return v.isoformat()
+        return str(v)
+
+    model_config = {"populate_by_name": True}
 
 
 class EmployeeCreate(EmployeeBase):

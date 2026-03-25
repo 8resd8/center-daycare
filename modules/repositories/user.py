@@ -1,5 +1,22 @@
 from typing import List, Optional, Dict, Any
 from .base import BaseRepository
+from backend.encryption import EncryptionService
+
+
+def _get_enc() -> EncryptionService:
+    return EncryptionService()
+
+
+def _decrypt_user(row: Optional[Dict]) -> Optional[Dict]:
+    """DB 행의 PII 컬럼(name, birth_date)을 복호화."""
+    if row is None:
+        return None
+    enc = _get_enc()
+    result = dict(row)
+    for col in ("name", "birth_date"):
+        if result.get(col) is not None:
+            result[col] = enc.safe_decrypt(str(result[col]))
+    return result
 
 
 class UserRepository(BaseRepository):
@@ -24,17 +41,22 @@ class UserRepository(BaseRepository):
         """
         params = []
 
-        if keyword:
-            like = f"%{keyword}%"
-            query += " AND (name LIKE %s OR job_type LIKE %s)"
-            params.extend([like, like])
-
         if work_status and work_status != "전체":
             query += " AND work_status = %s"
             params.append(work_status)
 
-        query += " ORDER BY name"
-        return self._execute_query(query, tuple(params))
+        query += " ORDER BY user_id"
+        rows = self._execute_query(query, tuple(params))
+        decrypted = [_decrypt_user(r) for r in rows]
+
+        if keyword:
+            kw = keyword.lower()
+            decrypted = [
+                r for r in decrypted
+                if (r.get("name") and kw in r["name"].lower())
+                or (r.get("job_type") and kw in r["job_type"].lower())
+            ]
+        return decrypted
 
     def create_user(
         self,
@@ -58,15 +80,16 @@ class UserRepository(BaseRepository):
                 license_name, license_date
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
+        enc = _get_enc()
         return self._execute_transaction_lastrowid(
             query,
             (
                 username,
                 password,
                 role,
-                name,
+                enc.encrypt(str(name)),
                 gender,
-                birth_date,
+                enc.encrypt_optional(str(birth_date) if birth_date else None),
                 work_status,
                 job_type,
                 hire_date,
@@ -103,12 +126,13 @@ class UserRepository(BaseRepository):
                 updated_at = CURRENT_TIMESTAMP
             WHERE user_id = %s
         """
+        enc = _get_enc()
         return self._execute_transaction(
             query,
             (
-                name,
+                enc.encrypt(str(name)),
                 gender,
-                birth_date,
+                enc.encrypt_optional(str(birth_date) if birth_date else None),
                 work_status,
                 job_type,
                 hire_date,
@@ -139,7 +163,7 @@ class UserRepository(BaseRepository):
             FROM users
             WHERE user_id = %s
         """
-        return self._execute_query_one(query, (user_id,))
+        return _decrypt_user(self._execute_query_one(query, (user_id,)))
 
     def find_by_user_id_with_auth(self, user_id: int) -> Optional[Dict[str, Any]]:
         """리프레시 토큰 갱신용 — username, role 포함 조회 (퇴사자 제외)."""
@@ -148,7 +172,7 @@ class UserRepository(BaseRepository):
             FROM users
             WHERE user_id = %s AND work_status != '퇴사'
         """
-        return self._execute_query_one(query, (user_id,))
+        return _decrypt_user(self._execute_query_one(query, (user_id,)))
 
     def find_by_username(self, username: str) -> Optional[Dict[str, Any]]:
         """로그인 전용 — password, username, role 컬럼 포함하여 조회 (퇴사자 제외)."""
@@ -157,7 +181,7 @@ class UserRepository(BaseRepository):
             FROM users
             WHERE username = %s AND work_status != '퇴사'
         """
-        return self._execute_query_one(query, (username,))
+        return _decrypt_user(self._execute_query_one(query, (username,)))
 
     def update_password(self, user_id: int, hashed_password: str) -> int:
         """비밀번호 해시 업데이트 (SHA256 → bcrypt 자동 마이그레이션용)."""
