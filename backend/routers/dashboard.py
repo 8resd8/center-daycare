@@ -1,10 +1,12 @@
 """대시보드 라우터"""
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException
 from typing import Optional
 from datetime import date
 
-router = APIRouter()
+from backend.dependencies import get_current_user
+
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 @router.get("/dashboard/summary")

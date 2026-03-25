@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -12,12 +12,15 @@ import {
   Loader2,
   Check,
   X,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDocumentStore } from "@/store/documentStore";
 import { useFilterStore } from "@/store/filterStore";
 import { uploadApi } from "@/api/upload";
 import { dailyRecordsApi } from "@/api/dailyRecords";
+import { useAuthStore } from "@/store/authStore";
+import { authApi } from "@/api/auth";
 
 const navItems = [
   { to: "/", label: "기록지 처리", icon: FileText },
@@ -32,7 +35,9 @@ interface SidebarProps {
 
 export default function Sidebar({ onClose }: SidebarProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const isRecordsPage = location.pathname === "/";
+  const { user, clearAuth } = useAuthStore();
 
   const { addDoc, markSaved, removeDoc, uploadedDocs } = useDocumentStore();
   const {
@@ -45,6 +50,15 @@ export default function Sidebar({ onClose }: SidebarProps) {
   const [localEnd, setLocalEnd] = useState<string>(endDate ?? "");
   const [uploading, setUploading] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
+
+  const handleLogout = async () => {
+    try {
+      await authApi.logout();
+    } finally {
+      clearAuth();
+      navigate("/login", { replace: true });
+    }
+  };
 
   // 수급자 목록 (기록지 처리 페이지에서만 로드)
   const { data: customersWithRecords = [], isLoading: loadingCustomers } = useQuery({
@@ -144,11 +158,16 @@ export default function Sidebar({ onClose }: SidebarProps) {
     <aside className="w-[240px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
       {/* 로고 */}
       <div className="px-4 py-5 border-b border-gray-100 flex items-start justify-between">
-        <h1 className="text-base font-bold text-blue-700 leading-tight">
-          보은사랑
-          <br />
-          <span className="text-xs font-normal text-gray-500">업무 관리 시스템</span>
-        </h1>
+        <div>
+          <h1 className="text-base font-bold text-blue-700 leading-tight">
+            보은사랑
+            <br />
+            <span className="text-xs font-normal text-gray-500">업무 관리 시스템</span>
+          </h1>
+          {user && (
+            <p className="text-xs text-gray-400 mt-1">{user.name}</p>
+          )}
+        </div>
         {onClose && (
           <button onClick={onClose} className="p-1 rounded hover:bg-gray-100 text-gray-400">
             <X size={16} />
@@ -291,6 +310,16 @@ export default function Sidebar({ onClose }: SidebarProps) {
           </div>
         </div>
       )}
+      {/* 로그아웃 */}
+      <div className="px-4 py-3 border-t border-gray-100 mt-auto">
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs text-gray-500 hover:bg-gray-50 hover:text-gray-800 transition-colors"
+        >
+          <LogOut size={14} />
+          로그아웃
+        </button>
+      </div>
     </aside>
   );
 }

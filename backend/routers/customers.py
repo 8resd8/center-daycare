@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 
-from backend.dependencies import get_customer_repo
+from backend.dependencies import get_customer_repo, get_current_user
 from backend.schemas.customers import CustomerCreate, CustomerUpdate, CustomerResponse
 from modules.repositories.customer import CustomerRepository
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 @router.get("/customers", response_model=List[CustomerResponse])

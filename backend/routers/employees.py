@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 
-from backend.dependencies import get_user_repo
+from passlib.context import CryptContext
+
+from backend.dependencies import get_user_repo, get_current_user
 from backend.schemas.employees import EmployeeCreate, EmployeeUpdate, EmployeeResponse
 from modules.repositories.user import UserRepository
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
+_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 @router.get("/employees", response_model=List[EmployeeResponse])
@@ -33,8 +36,7 @@ def create_employee(
     body: EmployeeCreate,
     repo: UserRepository = Depends(get_user_repo),
 ):
-    import hashlib
-    hashed_password = hashlib.sha256(body.password.encode()).hexdigest()
+    hashed_password = _pwd_context.hash(body.password)
 
     user_id = repo.create_user(
         username=body.username,

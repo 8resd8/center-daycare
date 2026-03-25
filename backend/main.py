@@ -9,9 +9,17 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
-from fastapi import FastAPI
+# .env 파일 로드 (Streamlit secrets 없이 환경변수로 운영 시)
+from dotenv import load_dotenv
+load_dotenv(ROOT_DIR / ".env")
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from backend.routers import (
     customers,
@@ -22,7 +30,11 @@ from backend.routers import (
     employee_evaluations,
     upload,
     dashboard,
+    auth,
 )
+
+
+limiter = Limiter(key_func=get_remote_address)
 
 
 @asynccontextmanager
@@ -48,6 +60,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # CORS 설정
 app.add_middleware(
     CORSMiddleware,
@@ -62,7 +77,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 라우터 등록
+# 라우터 등록 — auth는 인증 없이 접근 가능
+app.include_router(auth.router, prefix="/api", tags=["인증"])
 app.include_router(customers.router, prefix="/api", tags=["수급자"])
 app.include_router(employees.router, prefix="/api", tags=["직원"])
 app.include_router(daily_records.router, prefix="/api", tags=["일일 기록"])

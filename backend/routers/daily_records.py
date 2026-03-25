@@ -2,11 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 from datetime import date
 
-from backend.dependencies import get_daily_info_repo
+from backend.dependencies import get_daily_info_repo, get_current_user
 from backend.schemas.daily_records import DailyRecordSummary, CustomerWithRecords
 from modules.repositories.daily_info import DailyInfoRepository
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 @router.get("/daily-records", response_model=List[DailyRecordSummary])
