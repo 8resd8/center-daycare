@@ -2,6 +2,17 @@ from typing import List, Dict, Optional, Iterator, Generator
 import gc
 from modules.db_connection import db_transaction, db_query
 from .base import BaseRepository
+from backend.encryption import EncryptionService
+
+
+def _dec_customer_fields(row: Dict, name_key="name", birth_key="birth_date", recog_key="recognition_no") -> Dict:
+    """customer JOIN 결과 행의 PII 필드를 복호화하여 반환 (복사본)."""
+    enc = EncryptionService()
+    result = dict(row)
+    for key in (name_key, birth_key, recog_key):
+        if result.get(key) is not None:
+            result[key] = enc.safe_decrypt(str(result[key]))
+    return result
 
 
 class DailyInfoRepository(BaseRepository):
@@ -397,8 +408,9 @@ class DailyInfoRepository(BaseRepository):
         
         query += " GROUP BY c.customer_id, c.name, c.birth_date, c.grade, c.recognition_no"
         query += " ORDER BY c.name"
-        
-        return self._execute_query(query, tuple(params) if params else None)
+
+        rows = self._execute_query(query, tuple(params) if params else None)
+        return [_dec_customer_fields(r) for r in rows]
     
     def get_all_records_by_date_range(self, start_date, end_date) -> List[Dict]:
         """날짜 범위 내 모든 레코드 조회 (대상자 정보 포함)"""
@@ -425,7 +437,10 @@ class DailyInfoRepository(BaseRepository):
             WHERE di.date BETWEEN %s AND %s
             ORDER BY c.name, di.date DESC
         """
-        return self._execute_query(query, (start_date, end_date))
+        rows = self._execute_query(query, (start_date, end_date))
+        return [_dec_customer_fields(r, name_key="customer_name",
+                                     birth_key="customer_birth_date",
+                                     recog_key="customer_recognition_no") for r in rows]
     
     # 트랜잭션 처리를 위한 비공개 헬퍼 메서드들
     def _get_or_create_customer_in_transaction(self, cursor, record: Dict) -> int:

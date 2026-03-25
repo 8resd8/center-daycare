@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from typing import List, Optional
 
 from backend.dependencies import get_customer_repo, get_current_user
-from backend.encryption import apply_customer_mask
+from backend.encryption import apply_customer_mask, is_admin
 from backend.schemas.customers import CustomerCreate, CustomerUpdate, CustomerResponse
 from modules.repositories.customer import CustomerRepository
 from modules.repositories.audit import AuditRepository
@@ -15,7 +15,7 @@ def _audit_repo() -> AuditRepository:
 
 
 def _maybe_mask(data: dict, current_user: dict) -> dict:
-    if current_user.get("role") != "ADMIN":
+    if not is_admin(current_user):
         return apply_customer_mask(data)
     return data
 

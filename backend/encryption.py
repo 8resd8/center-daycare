@@ -89,7 +89,9 @@ def mask_facility(val: str) -> str:
 
 
 def apply_customer_mask(customer: dict) -> dict:
-    """수급자 딕셔너리에 마스킹 적용 (복사본 반환)."""
+    """수급자 딕셔너리에 마스킹 적용 (복사본 반환).
+    ADMIN 외 역할: name/birth_date/recognition_no/facility_name/facility_code/grade 마스킹.
+    """
     masked = dict(customer)
     if masked.get("name"):
         masked["name"] = mask_name(masked["name"])
@@ -101,14 +103,31 @@ def apply_customer_mask(customer: dict) -> dict:
         masked["facility_name"] = mask_facility(masked["facility_name"])
     if masked.get("facility_code"):
         masked["facility_code"] = mask_facility(masked["facility_code"])
+    if masked.get("grade") is not None:
+        masked["grade"] = "**"
     return masked
 
 
 def apply_employee_mask(employee: dict) -> dict:
-    """직원 딕셔너리에 마스킹 적용 (복사본 반환)."""
+    """직원 딕셔너리에 마스킹 적용 (복사본 반환).
+    ADMIN 외 역할: name/birth_date/job_type/work_status/hire_date/license_name 마스킹.
+    """
     masked = dict(employee)
     if masked.get("name"):
         masked["name"] = mask_name(masked["name"])
     if masked.get("birth_date"):
         masked["birth_date"] = mask_birth_date(str(masked["birth_date"]))
+    if masked.get("job_type") is not None:
+        masked["job_type"] = "***"
+    if masked.get("work_status") is not None:
+        masked["work_status"] = "***"
+    if masked.get("hire_date") is not None:
+        masked["hire_date"] = "****-**-**"
+    if masked.get("license_name") is not None:
+        masked["license_name"] = "***"
     return masked
+
+
+def is_admin(current_user: dict) -> bool:
+    """JWT payload에서 ADMIN 여부 확인 (대소문자 무관)."""
+    return str(current_user.get("role", "")).upper() == "ADMIN"

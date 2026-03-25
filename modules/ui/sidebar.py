@@ -315,7 +315,13 @@ def _render_person_list_fragment():
     for entry in person_entries:
         is_active = entry["key"] == active_person_key
         cols = st.columns([0.75, 0.25])
-        display_label = f"{entry['person_name']} · {entry['record_count']}건"
+        _pname = entry['person_name']
+        try:
+            from backend.encryption import mask_name as _mask
+            _display_name = _pname[0] + "**" if _pname and len(_pname) > 0 else _pname
+        except Exception:
+            _display_name = _pname
+        display_label = f"{_display_name} · {entry['record_count']}건"
         button_type = "primary" if is_active else "secondary"
         
         with cols[0]:

@@ -4,7 +4,7 @@ from typing import List, Optional
 from passlib.context import CryptContext
 
 from backend.dependencies import get_user_repo, get_current_user
-from backend.encryption import apply_employee_mask
+from backend.encryption import apply_employee_mask, is_admin
 from backend.schemas.employees import EmployeeCreate, EmployeeUpdate, EmployeeResponse
 from modules.repositories.user import UserRepository
 from modules.repositories.audit import AuditRepository
@@ -18,7 +18,7 @@ def _audit_repo() -> AuditRepository:
 
 
 def _maybe_mask(data: dict, current_user: dict) -> dict:
-    if current_user.get("role") != "ADMIN":
+    if not is_admin(current_user):
         return apply_employee_mask(data)
     return data
 

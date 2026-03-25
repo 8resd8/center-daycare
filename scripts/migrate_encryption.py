@@ -20,6 +20,13 @@ import argparse
 import os
 import sys
 
+# 프로젝트 루트의 .env 자동 로드
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
+except ImportError:
+    pass
+
 # 프로젝트 루트를 sys.path에 추가
 _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _root not in sys.path:
