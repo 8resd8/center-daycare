@@ -3,6 +3,7 @@ from typing import List, Optional
 from datetime import date
 
 from backend.dependencies import get_daily_info_repo, get_current_user
+from backend.encryption import apply_customer_mask, is_admin
 from backend.schemas.daily_records import DailyRecordSummary, CustomerWithRecords
 from modules.repositories.daily_info import DailyInfoRepository
 
@@ -30,8 +31,12 @@ def get_customers_with_records(
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
     repo: DailyInfoRepository = Depends(get_daily_info_repo),
+    current_user: dict = Depends(get_current_user),
 ):
-    return repo.get_customers_with_records(start_date=start_date, end_date=end_date)
+    rows = repo.get_customers_with_records(start_date=start_date, end_date=end_date)
+    if not is_admin(current_user):
+        rows = [apply_customer_mask(r) for r in rows]
+    return rows
 
 
 @router.get("/daily-records/{record_id}", response_model=DailyRecordSummary)
