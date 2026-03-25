@@ -258,13 +258,14 @@ class TestGetApiKey:
         assert result == 'env-key'
 
     def test_get_api_key_from_streamlit_secrets(self):
-        """환경변수 없을 때 Streamlit secrets에서 키 조회"""
+        """Streamlit 런타임에서 st.secrets로 키 조회"""
         mock_st = MagicMock()
         mock_st.secrets.get.return_value = 'secrets-gemini-key'
 
         with patch.dict(os.environ, {}, clear=True):
-            with patch.dict(sys.modules, {'streamlit': mock_st}):
-                result = get_api_key(provider='gemini')
+            with patch('modules.clients.ai_client._is_streamlit_runtime', return_value=True):
+                with patch.dict(sys.modules, {'streamlit': mock_st}):
+                    result = get_api_key(provider='gemini')
 
         assert result == 'secrets-gemini-key'
 

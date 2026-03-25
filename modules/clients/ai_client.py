@@ -150,18 +150,15 @@ def get_api_key(provider: str = 'gemini') -> str:
     if api_key:
         return api_key
     
-    # Streamlit secrets에서 확인
-    try:
-        import streamlit as st
-        if hasattr(st, 'secrets'):
-            try:
-                api_key = st.secrets.get(secret_key)
-            except Exception:
-                api_key = None
+    # Streamlit 런타임에서만 st.secrets 사용 (FastAPI에서 호출 시 건너뜀)
+    if _is_streamlit_runtime():
+        try:
+            import streamlit as st
+            api_key = st.secrets.get(secret_key)
             if api_key:
                 return api_key
-    except ImportError:
-        pass
+        except Exception:
+            pass
 
     # secrets.toml 직접 읽기 (FastAPI/uvicorn 환경)
     import pathlib
@@ -192,31 +189,38 @@ def get_api_key(provider: str = 'gemini') -> str:
     raise ValueError(error_msg)
 
 
+def _is_streamlit_runtime() -> bool:
+    """실제 Streamlit 런타임에서 실행 중인지 확인 (FastAPI 환경과 구분)"""
+    try:
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+        return get_script_run_ctx() is not None
+    except Exception:
+        return False
+
+
 def get_ai_client(provider: str = 'gemini') -> BaseAIClient:
     """AI 클라이언트 인스턴스 반환
-    
+
     Args:
         provider: 'openai' 또는 'gemini' (기본값: 'gemini')
-    
+
     설정된 커스텀 클라이언트가 있으면 사용하고(테스트용),
-    그렇지 않으면 환경변수나 Streamlit secrets의 API 키로 새 클라이언트를 생성합니다.
-    
-    Streamlit 프로덕션 환경에서는 st.cache_resource를 사용하여 캐시됩니다.
+    그렇지 않으면 환경변수나 secrets.toml의 API 키로 새 클라이언트를 생성합니다.
+
+    Streamlit 런타임에서는 st.cache_resource를 사용하여 캐시됩니다.
+    FastAPI/uvicorn 환경에서는 직접 클라이언트를 생성합니다.
     """
     global _ai_client_instance
-    
+
     # 테스트용 커스텀 클라이언트가 설정되어 있으면 반환
     if _ai_client_instance is not None:
         return _ai_client_instance
-    
-    # Streamlit 환경인 경우 캐시된 클라이언트 반환
-    try:
-        import streamlit as st
+
+    # 실제 Streamlit 런타임에서만 캐싱 클라이언트 사용
+    if _is_streamlit_runtime():
         return _get_cached_ai_client(provider)
-    except (ImportError, RuntimeError):
-        pass
-    
-    # 일반 환경에서는 새 클라이언트 생성
+
+    # FastAPI / 일반 환경: 직접 클라이언트 생성
     api_key = get_api_key(provider)
     if provider == 'gemini':
         if genai is None:
