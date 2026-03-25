@@ -4,13 +4,25 @@ import { Loader2 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { authApi } from "@/api/auth";
 
+const SAVED_USERNAME_KEY = "saved_username";
+
 export default function LoginPage() {
   const { user, setUser } = useAuthStore();
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [saveId, setSaveId] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // 저장된 아이디 불러오기
+  useEffect(() => {
+    const saved = localStorage.getItem(SAVED_USERNAME_KEY);
+    if (saved) {
+      setUsername(saved);
+      setSaveId(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (user) navigate("/", { replace: true });
@@ -22,6 +34,14 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await authApi.login(username, password);
+
+      // 아이디 저장 처리
+      if (saveId) {
+        localStorage.setItem(SAVED_USERNAME_KEY, username);
+      } else {
+        localStorage.removeItem(SAVED_USERNAME_KEY);
+      }
+
       setUser(res.data);
       navigate("/", { replace: true });
     } catch {
@@ -64,6 +84,17 @@ export default function LoginPage() {
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
           </div>
+
+          {/* 아이디 저장 */}
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={saveId}
+              onChange={(e) => setSaveId(e.target.checked)}
+              className="w-3.5 h-3.5 rounded accent-blue-600"
+            />
+            <span className="text-xs text-gray-500">아이디 저장</span>
+          </label>
 
           {error && (
             <p className="text-xs text-red-500">{error}</p>

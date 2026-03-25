@@ -28,9 +28,22 @@ def reset_rate_limiter():
         pass
 
 _PWD_CONTEXT = CryptContext(schemes=["bcrypt"], deprecated="auto")
-# auth.py와 dependencies.py의 기본값과 동일하게 맞춰야 함
-_DEFAULT_SECRET = "change-me-in-production-use-random-32bytes"
+_TEST_SECRET = "test-secret-key-for-unit-tests-only"
 _ALGORITHM = "HS256"
+
+
+@pytest.fixture(autouse=True)
+def patch_jwt_secret():
+    """테스트 전용 JWT secret으로 auth 모듈을 패치 (load_dotenv 영향 차단)."""
+    import backend.routers.auth as auth_module
+    import backend.dependencies as deps_module
+    original_auth = auth_module.SECRET_KEY
+    original_deps = deps_module._SECRET_KEY
+    auth_module.SECRET_KEY = _TEST_SECRET
+    deps_module._SECRET_KEY = _TEST_SECRET
+    yield
+    auth_module.SECRET_KEY = original_auth
+    deps_module._SECRET_KEY = original_deps
 
 
 def _make_user(
@@ -211,7 +224,7 @@ class TestMe:
             "role": "EMPLOYEE",
             "exp": datetime.now(timezone.utc) + timedelta(hours=8),
         }
-        return jwt.encode(payload, _DEFAULT_SECRET, algorithm=_ALGORITHM)
+        return jwt.encode(payload, _TEST_SECRET, algorithm=_ALGORITHM)
 
     def test_me_with_valid_cookie_returns_user(self):
         token = self._valid_token()
@@ -239,7 +252,7 @@ class TestMe:
             "role": "EMPLOYEE",
             "exp": datetime.now(timezone.utc) - timedelta(hours=1),
         }
-        expired_token = jwt.encode(payload, _DEFAULT_SECRET, algorithm=_ALGORITHM)
+        expired_token = jwt.encode(payload, _TEST_SECRET, algorithm=_ALGORITHM)
         with TestClient(app, raise_server_exceptions=False) as client:
             res = client.get("/api/auth/me", cookies={"access_token": expired_token})
         assert res.status_code == 401

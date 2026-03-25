@@ -13,5 +13,7 @@ export const authApi = {
 
   me: () => api.get<UserInfo>("/auth/me"),
 
+  refresh: () => api.post<UserInfo>("/auth/refresh"),
+
   logout: () => api.post("/auth/logout"),
 };

@@ -141,6 +141,15 @@ class UserRepository(BaseRepository):
         """
         return self._execute_query_one(query, (user_id,))
 
+    def find_by_user_id_with_auth(self, user_id: int) -> Optional[Dict[str, Any]]:
+        """리프레시 토큰 갱신용 — username, role 포함 조회 (퇴사자 제외)."""
+        query = """
+            SELECT user_id, username, password, name, role, work_status
+            FROM users
+            WHERE user_id = %s AND work_status != '퇴사'
+        """
+        return self._execute_query_one(query, (user_id,))
+
     def find_by_username(self, username: str) -> Optional[Dict[str, Any]]:
         """로그인 전용 — password, username, role 컬럼 포함하여 조회 (퇴사자 제외)."""
         query = """
