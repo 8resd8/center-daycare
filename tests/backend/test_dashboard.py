@@ -131,17 +131,17 @@ class TestEvaluationTrend:
 
 class TestEmployeeRankings:
     def test_랭킹_반환(self, client):
+        # 새 구현: 1차 fetchall(유저 목록) + 유저별 fetchone(레코드 통계)
         cursor = MagicMock()
         cursor.fetchall.return_value = [
-            {
-                "user_id": 1,
-                "name": "김요양",
-                "total_records": 10,
-                "excellent_count": 8,
-                "average_count": 1,
-                "improvement_count": 1,
-            }
+            {"user_id": 1, "name": "김요양"}
         ]
+        cursor.fetchone.return_value = {
+            "total_records": 10,
+            "excellent_count": 8,
+            "average_count": 1,
+            "improvement_count": 1,
+        }
 
         @contextmanager
         def _mock_db():
@@ -154,21 +154,21 @@ class TestEmployeeRankings:
         data = resp.json()
         assert len(data) == 1
         assert data[0]["user_id"] == 1
+        assert data[0]["name"] == "김요양"
         assert "score" in data[0]
         assert data[0]["score"] > 0
 
     def test_평가없는_직원_score_0(self, client):
         cursor = MagicMock()
         cursor.fetchall.return_value = [
-            {
-                "user_id": 2,
-                "name": "박간호",
-                "total_records": 0,
-                "excellent_count": 0,
-                "average_count": 0,
-                "improvement_count": 0,
-            }
+            {"user_id": 2, "name": "박간호"}
         ]
+        cursor.fetchone.return_value = {
+            "total_records": 0,
+            "excellent_count": 0,
+            "average_count": 0,
+            "improvement_count": 0,
+        }
 
         @contextmanager
         def _mock_db():

@@ -5,6 +5,7 @@ from typing import Optional
 from datetime import date
 
 from backend.dependencies import get_current_user
+from backend.encryption import EncryptionService, mask_name, is_admin
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -116,60 +117,69 @@ def get_evaluation_trend(
 def get_employee_rankings(
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
+    current_user: dict = Depends(get_current_user),
 ):
     """직원별 기록 및 평가 랭킹"""
     from modules.db_connection import db_query
 
-    params = []
+    enc = EncryptionService()
+    admin = is_admin(current_user)
+
+    # 1단계: 재직 중 직원 조회 및 이름 복호화
+    with db_query() as cursor:
+        cursor.execute("SELECT user_id, name FROM users WHERE work_status = '재직'")
+        users = cursor.fetchall()
+
+    date_params: list = []
     date_filter = ""
     if start_date and end_date:
         date_filter = "AND di.date BETWEEN %s AND %s"
-        params = [start_date, end_date]
-
-    query = f"""
-        SELECT
-            u.user_id,
-            u.name,
-            COUNT(DISTINCT di.record_id) as total_records,
-            SUM(CASE ae.grade_code WHEN '우수' THEN 1 ELSE 0 END) as excellent_count,
-            SUM(CASE ae.grade_code WHEN '평균' THEN 1 ELSE 0 END) as average_count,
-            SUM(CASE ae.grade_code WHEN '개선' THEN 1 ELSE 0 END) as improvement_count
-        FROM users u
-        LEFT JOIN daily_infos di ON (
-            di.record_id IN (
-                SELECT dp.record_id FROM daily_physicals dp WHERE dp.writer_name = u.name
-                UNION
-                SELECT dc.record_id FROM daily_cognitives dc WHERE dc.writer_name = u.name
-            )
-            {date_filter}
-        )
-        LEFT JOIN ai_evaluations ae ON ae.record_id = di.record_id
-        WHERE u.work_status = '재직'
-        GROUP BY u.user_id, u.name
-        ORDER BY excellent_count DESC, total_records DESC
-    """
-    with db_query() as cursor:
-        cursor.execute(query, params if params else [])
-        rows = cursor.fetchall()
+        date_params = [start_date, end_date]
 
     result = []
-    for r in rows:
-        total = (r["excellent_count"] or 0) + (r["average_count"] or 0) + (r["improvement_count"] or 0)
-        score = (
-            ((r["excellent_count"] or 0) * 3 + (r["average_count"] or 0) * 2 + (r["improvement_count"] or 0)) / total
-            if total > 0
-            else 0.0
-        )
+    for u in users:
+        uid = u["user_id"]
+        decrypted_name = enc.safe_decrypt(u["name"])
+
+        # 2단계: 복호화된 이름으로 writer_name(평문) 매칭
+        params = [decrypted_name, decrypted_name] + date_params
+        query = f"""
+            SELECT
+                COUNT(DISTINCT di.record_id) as total_records,
+                SUM(CASE ae.grade_code WHEN '우수' THEN 1 ELSE 0 END) as excellent_count,
+                SUM(CASE ae.grade_code WHEN '평균' THEN 1 ELSE 0 END) as average_count,
+                SUM(CASE ae.grade_code WHEN '개선' THEN 1 ELSE 0 END) as improvement_count
+            FROM daily_infos di
+            LEFT JOIN ai_evaluations ae ON ae.record_id = di.record_id
+            WHERE di.record_id IN (
+                SELECT dp.record_id FROM daily_physicals dp WHERE dp.writer_name = %s
+                UNION
+                SELECT dc.record_id FROM daily_cognitives dc WHERE dc.writer_name = %s
+            ) {date_filter}
+        """
+        with db_query() as cursor:
+            cursor.execute(query, params)
+            row = cursor.fetchone()
+
+        exc = (row["excellent_count"] or 0) if row else 0
+        avg = (row["average_count"] or 0) if row else 0
+        imp = (row["improvement_count"] or 0) if row else 0
+        total_r = (row["total_records"] or 0) if row else 0
+        total_grade = exc + avg + imp
+        score = ((exc * 3 + avg * 2 + imp) / total_grade) if total_grade > 0 else 0.0
+
+        display_name = decrypted_name if admin else mask_name(decrypted_name)
         result.append({
-            "user_id": r["user_id"],
-            "name": r["name"],
-            "total_records": r["total_records"] or 0,
-            "excellent_count": r["excellent_count"] or 0,
-            "average_count": r["average_count"] or 0,
-            "improvement_count": r["improvement_count"] or 0,
+            "user_id": uid,
+            "name": display_name,
+            "total_records": total_r,
+            "excellent_count": exc,
+            "average_count": avg,
+            "improvement_count": imp,
             "score": round(score, 2),
         })
 
+    result.sort(key=lambda x: (-x["excellent_count"], -x["total_records"]))
     return result
 
 
@@ -206,9 +216,13 @@ def get_employee_details(
     user_id: int,
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
+    current_user: dict = Depends(get_current_user),
 ):
     """직원별 상세 기록 및 평가"""
     from modules.db_connection import db_query
+
+    enc = EncryptionService()
+    admin = is_admin(current_user)
 
     with db_query() as cursor:
         cursor.execute("SELECT user_id, name FROM users WHERE user_id = %s", (user_id,))
@@ -217,7 +231,9 @@ def get_employee_details(
     if not user:
         raise HTTPException(status_code=404, detail="직원을 찾을 수 없습니다.")
 
-    params = [user["name"], user["name"]]
+    decrypted_name = enc.safe_decrypt(user["name"])
+
+    params = [decrypted_name, decrypted_name]
     date_filter = ""
     if start_date and end_date:
         date_filter = "AND di.date BETWEEN %s AND %s"
@@ -246,10 +262,20 @@ def get_employee_details(
         cursor.execute(query, params)
         records = cursor.fetchall()
 
+    # 복호화 + 마스킹
+    processed_records = []
+    for r in records:
+        row = dict(r)
+        if row.get("customer_name"):
+            plain = enc.safe_decrypt(row["customer_name"])
+            row["customer_name"] = plain if admin else mask_name(plain)
+        processed_records.append(row)
+
+    display_name = decrypted_name if admin else mask_name(decrypted_name)
     return {
         "user_id": user["user_id"],
-        "name": user["name"],
-        "records": [dict(r) for r in records],
+        "name": display_name,
+        "records": processed_records,
     }
 
 
@@ -332,6 +358,7 @@ def get_emp_eval_category(
 def get_emp_eval_rankings(
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
+    current_user: dict = Depends(get_current_user),
 ):
     """직원별 지적 건수 랭킹"""
     from modules.db_connection import db_query
@@ -362,6 +389,8 @@ def get_emp_eval_rankings(
         cursor.execute(query, params)
         rows = cursor.fetchall()
 
+    enc = EncryptionService()
+    admin = is_admin(current_user)
     result = []
     for r in rows:
         types = {
@@ -372,9 +401,10 @@ def get_emp_eval_rankings(
             "오류": r["cnt_오류"] or 0,
         }
         main_type = max(types, key=lambda k: types[k]) if any(types.values()) else "-"
+        plain = enc.safe_decrypt(r["name"])
         result.append({
             "user_id": r["user_id"],
-            "name": r["name"],
+            "name": plain if admin else mask_name(plain),
             "total_count": r["total_count"] or 0,
             "main_type": main_type,
         })
@@ -386,6 +416,7 @@ def get_employee_eval_history(
     user_id: int,
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
+    current_user: dict = Depends(get_current_user),
 ):
     """직원별 지적 이력 상세"""
     from modules.db_connection import db_query
@@ -396,6 +427,10 @@ def get_employee_eval_history(
 
     if not user:
         raise HTTPException(status_code=404, detail="직원을 찾을 수 없습니다.")
+
+    enc = EncryptionService()
+    admin = is_admin(current_user)
+    decrypted_name = enc.safe_decrypt(user["name"])
 
     params: list = [user_id]
     date_filter = ""
@@ -423,7 +458,7 @@ def get_employee_eval_history(
 
     return {
         "user_id": user["user_id"],
-        "name": user["name"],
+        "name": decrypted_name if admin else mask_name(decrypted_name),
         "records": [
             {
                 "emp_eval_id": r["emp_eval_id"],
