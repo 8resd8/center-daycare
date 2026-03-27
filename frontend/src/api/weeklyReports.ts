@@ -1,5 +1,5 @@
 import api from "./client";
-import type { WeeklyReport } from "@/types";
+import type { WeeklyReport, WeeklyGenerateResult, WeeklyAnalysisResult } from "@/types";
 
 export const weeklyReportsApi = {
   list: (params: {
@@ -17,7 +17,16 @@ export const weeklyReportsApi = {
     end_date: string;
   }) =>
     api
-      .post<{ report_text: string }>("/weekly-reports/generate", body)
+      .post<WeeklyGenerateResult>("/weekly-reports/generate", body)
+      .then((r) => r.data),
+
+  analysis: (params: {
+    customer_id: number;
+    start_date: string;
+    end_date: string;
+  }) =>
+    api
+      .get<WeeklyAnalysisResult>("/weekly-reports/analysis", { params })
       .then((r) => r.data),
 
   save: (

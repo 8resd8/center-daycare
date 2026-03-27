@@ -418,7 +418,8 @@ class TestAnalyzeWeeklyTrend:
                 'toilet_care': '소변 3회 대변 1회',
                 'bath_time': '10:00',
                 'bp_temp': '120/80 36.5',
-                'prog_therapy': '완료'
+                'prog_therapy': '완료',
+                'prog_enhance_detail': '미니골프 활동 참여',
             },
             {
                 'date': date(2024, 1, 9),
@@ -433,7 +434,8 @@ class TestAnalyzeWeeklyTrend:
                 'toilet_care': '소변 2회',
                 'bath_time': None,
                 'bp_temp': None,
-                'prog_therapy': None
+                'prog_therapy': None,
+                'prog_enhance_detail': None,
             }
         ]
 
@@ -466,7 +468,10 @@ class TestAnalyzeWeeklyTrend:
                 customer_id=1
             )
 
-        required_keys = ['header', 'notes', 'weekly_table', 'category_notes', 'ai_payload']
+        required_keys = [
+            'header', 'notes', 'weekly_table', 'category_notes', 'ai_payload',
+            'prev_prog_entries', 'curr_prog_entries',
+        ]
         for key in required_keys:
             assert key in result, f"'{key}' 키가 결과에 없음"
 
@@ -538,7 +543,8 @@ class TestAnalyzeWeeklyTrend:
                 'toilet_care': None,
                 'bath_time': None,
                 'bp_temp': None,
-                'prog_therapy': None
+                'prog_therapy': None,
+                'prog_enhance_detail': None,
             }
         ]
 
@@ -553,3 +559,228 @@ class TestAnalyzeWeeklyTrend:
 
         this_week_row = next(r for r in result['weekly_table'] if r['주간'] == '이번주')
         assert this_week_row['출석일'] == 0
+
+    # ── prog_entries 관련 테스트 ────────────────────────────────────────
+
+    def _make_row(self, row_date: date, prog_enhance_detail=None, **overrides):
+        """테스트용 기본 row 생성 헬퍼"""
+        row = {
+            'date': row_date,
+            'total_service_time': '9시간',
+            'physical_note': None,
+            'cognitive_note': None,
+            'nursing_note': None,
+            'functional_note': None,
+            'meal_breakfast': None,
+            'meal_lunch': None,
+            'meal_dinner': None,
+            'toilet_care': None,
+            'bath_time': None,
+            'bp_temp': None,
+            'prog_therapy': None,
+            'prog_enhance_detail': prog_enhance_detail,
+        }
+        row.update(overrides)
+        return row
+
+    def test_prog_enhance_있으면_curr_entries_포함(self, date_ranges):
+        """prog_enhance_detail 있는 이번주 날짜 → curr_prog_entries에 포함"""
+        prev_range, curr_range = date_ranges
+        rows = [self._make_row(date(2024, 1, 8), prog_enhance_detail='미니골프 활동 참여')]
+
+        with patch('modules.weekly_data_analyzer.WeeklyStatusRepository') as MockRepo:
+            MockRepo.return_value.load_weekly_status.return_value = None
+            result = analyzer.analyze_weekly_trend(
+                rows=rows, prev_range=prev_range, curr_range=curr_range, customer_id=1
+            )
+
+        assert len(result['curr_prog_entries']) == 1
+        assert result['curr_prog_entries'][0]['detail'] == '미니골프 활동 참여'
+
+    def test_prog_enhance_날짜_MM_DD_형식(self, date_ranges):
+        """entries의 date가 'MM-DD' 형식이어야 한다"""
+        import re
+        prev_range, curr_range = date_ranges
+        rows = [self._make_row(date(2024, 1, 8), prog_enhance_detail='활동')]
+
+        with patch('modules.weekly_data_analyzer.WeeklyStatusRepository') as MockRepo:
+            MockRepo.return_value.load_weekly_status.return_value = None
+            result = analyzer.analyze_weekly_trend(
+                rows=rows, prev_range=prev_range, curr_range=curr_range, customer_id=1
+            )
+
+        entries = result['curr_prog_entries']
+        assert len(entries) == 1
+        assert re.fullmatch(r'\d{2}-\d{2}', entries[0]['date']), f"날짜 형식 오류: {entries[0]['date']}"
+        assert entries[0]['date'] == '01-08'
+
+    def test_prog_enhance_detail_내용_포함(self, sample_rows, date_ranges):
+        """entries의 detail 값이 원본 텍스트와 일치해야 한다"""
+        prev_range, curr_range = date_ranges
+
+        with patch('modules.weekly_data_analyzer.WeeklyStatusRepository') as MockRepo:
+            MockRepo.return_value.load_weekly_status.return_value = None
+            result = analyzer.analyze_weekly_trend(
+                rows=sample_rows, prev_range=prev_range, curr_range=curr_range, customer_id=1
+            )
+
+        # sample_rows의 첫 번째 row(01-08)에 '미니골프 활동 참여' 있음
+        details = [e['detail'] for e in result['curr_prog_entries']]
+        assert '미니골프 활동 참여' in details
+
+    def test_prog_enhance_None_제외(self, date_ranges):
+        """prog_enhance_detail=None → entries에 포함 안 됨"""
+        prev_range, curr_range = date_ranges
+        rows = [self._make_row(date(2024, 1, 8), prog_enhance_detail=None)]
+
+        with patch('modules.weekly_data_analyzer.WeeklyStatusRepository') as MockRepo:
+            MockRepo.return_value.load_weekly_status.return_value = None
+            result = analyzer.analyze_weekly_trend(
+                rows=rows, prev_range=prev_range, curr_range=curr_range, customer_id=1
+            )
+
+        assert result['curr_prog_entries'] == []
+
+    def test_prog_enhance_공백만_있으면_제외(self, date_ranges):
+        """공백만 있는 prog_enhance_detail → strip 후 empty → entries에 포함 안 됨"""
+        prev_range, curr_range = date_ranges
+        rows = [self._make_row(date(2024, 1, 8), prog_enhance_detail='   ')]
+
+        with patch('modules.weekly_data_analyzer.WeeklyStatusRepository') as MockRepo:
+            MockRepo.return_value.load_weekly_status.return_value = None
+            result = analyzer.analyze_weekly_trend(
+                rows=rows, prev_range=prev_range, curr_range=curr_range, customer_id=1
+            )
+
+        assert result['curr_prog_entries'] == []
+
+    def test_prog_enhance_지난주_prev_entries_분리(self, date_ranges):
+        """지난주 records → prev_prog_entries, 이번주 records → curr_prog_entries"""
+        prev_range, curr_range = date_ranges
+        # prev_range: (2024-01-01, 2024-01-07), curr_range: (2024-01-08, 2024-01-14)
+        rows = [
+            self._make_row(date(2024, 1, 3), prog_enhance_detail='지난주 활동'),
+            self._make_row(date(2024, 1, 8), prog_enhance_detail='이번주 활동'),
+        ]
+
+        with patch('modules.weekly_data_analyzer.WeeklyStatusRepository') as MockRepo:
+            MockRepo.return_value.load_weekly_status.return_value = None
+            result = analyzer.analyze_weekly_trend(
+                rows=rows, prev_range=prev_range, curr_range=curr_range, customer_id=1
+            )
+
+        assert len(result['prev_prog_entries']) == 1
+        assert result['prev_prog_entries'][0]['detail'] == '지난주 활동'
+        assert len(result['curr_prog_entries']) == 1
+        assert result['curr_prog_entries'][0]['detail'] == '이번주 활동'
+
+    def test_prog_enhance_필드_없어도_빈배열(self, date_ranges):
+        """rows에 prog_enhance_detail 키 자체 없어도 빈 배열 반환 (KeyError 아님)"""
+        prev_range, curr_range = date_ranges
+        rows = [
+            {
+                'date': date(2024, 1, 8),
+                'total_service_time': '9시간',
+                'physical_note': '정상',
+                'cognitive_note': '양호',
+                'nursing_note': None,
+                'functional_note': None,
+                'meal_breakfast': None,
+                'meal_lunch': None,
+                'meal_dinner': None,
+                'toilet_care': None,
+                'bath_time': None,
+                'bp_temp': None,
+                'prog_therapy': None,
+                # prog_enhance_detail 키 없음
+            }
+        ]
+
+        with patch('modules.weekly_data_analyzer.WeeklyStatusRepository') as MockRepo:
+            MockRepo.return_value.load_weekly_status.return_value = None
+            result = analyzer.analyze_weekly_trend(
+                rows=rows, prev_range=prev_range, curr_range=curr_range, customer_id=1
+            )
+
+        assert result['curr_prog_entries'] == []
+        assert result['prev_prog_entries'] == []
+
+
+class TestFetchTwoWeekRecords:
+    """_fetch_two_week_records 필드 포함 검증"""
+
+    def _make_db_record(self, record_date: date, **overrides):
+        record = {
+            'date': record_date,
+            'total_service_time': '9시간',
+            'physical_note': '정상',
+            'cognitive_note': '양호',
+            'nursing_note': None,
+            'functional_note': None,
+            'meal_breakfast': '일반식 전량',
+            'meal_lunch': '일반식 전량',
+            'meal_dinner': None,
+            'toilet_care': '소변 3회',
+            'bath_time': '10:00',
+            'bp_temp': '120/80',
+            'prog_therapy': '완료',
+            'prog_enhance_detail': None,
+        }
+        record.update(overrides)
+        return record
+
+    def test_prog_enhance_detail_필드_포함(self):
+        """반환 records에 prog_enhance_detail 키 포함 (누락 시 KeyError 위험)"""
+        db_record = self._make_db_record(
+            date(2024, 1, 8), prog_enhance_detail='미니골프 활동 참여'
+        )
+
+        with (
+            patch('modules.repositories.CustomerRepository') as MockCR,
+            patch('modules.weekly_data_analyzer.DailyInfoRepository') as MockDR,
+        ):
+            MockCR.return_value.find_by_name.return_value = {'customer_id': 1}
+            MockDR.return_value.get_customer_records.return_value = [db_record]
+
+            records, _, _ = analyzer._fetch_two_week_records('홍길동', date(2024, 1, 8))
+
+        assert len(records) == 1
+        assert 'prog_enhance_detail' in records[0], "prog_enhance_detail 필드가 변환된 record에 없음"
+        assert records[0]['prog_enhance_detail'] == '미니골프 활동 참여'
+
+    def test_prog_enhance_detail_없는_레코드_None으로_처리(self):
+        """DB record에 prog_enhance_detail 키 없어도 None으로 처리 (KeyError 아님)"""
+        db_record = {
+            'date': date(2024, 1, 8),
+            'total_service_time': '9시간',
+            'physical_note': '정상',
+            'cognitive_note': '양호',
+            'nursing_note': None,
+            'functional_note': None,
+            # prog_enhance_detail 키 없음
+        }
+
+        with (
+            patch('modules.repositories.CustomerRepository') as MockCR,
+            patch('modules.weekly_data_analyzer.DailyInfoRepository') as MockDR,
+        ):
+            MockCR.return_value.find_by_name.return_value = {'customer_id': 1}
+            MockDR.return_value.get_customer_records.return_value = [db_record]
+
+            records, _, _ = analyzer._fetch_two_week_records('홍길동', date(2024, 1, 8))
+
+        assert len(records) == 1
+        assert 'prog_enhance_detail' in records[0]
+        assert records[0]['prog_enhance_detail'] is None
+
+    def test_수급자_없으면_빈_records(self):
+        """find_by_name이 None 반환 시 빈 records 반환"""
+        with patch('modules.repositories.CustomerRepository') as MockCR:
+            MockCR.return_value.find_by_name.return_value = None
+            records, prev_range, curr_range = analyzer._fetch_two_week_records(
+                '없는사람', date(2024, 1, 8)
+            )
+
+        assert records == []
+        assert prev_range is not None
+        assert curr_range is not None

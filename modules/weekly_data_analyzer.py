@@ -113,7 +113,8 @@ def _fetch_two_week_records(
             'toilet_care': record.get('toilet_care'),
             'bath_time': record.get('bath_time'),
             'bp_temp': record.get('bp_temp'),
-            'prog_therapy': record.get('prog_therapy')
+            'prog_therapy': record.get('prog_therapy'),
+            'prog_enhance_detail': record.get('prog_enhance_detail'),
         })
     
     return transformed_records, (prev_start, prev_end), (start_date, curr_end)
@@ -760,6 +761,19 @@ def analyze_weekly_trend(
         },
     }
 
+    def _get_prog_entries(source_df: pd.DataFrame) -> List[Dict]:
+        entries = []
+        if source_df.empty or "prog_enhance_detail" not in source_df.columns:
+            return entries
+        for _, row in source_df.iterrows():
+            detail = row.get("prog_enhance_detail")
+            if detail and str(detail).strip():
+                entries.append({
+                    "date": row["date"].strftime("%m-%d"),
+                    "detail": str(detail).strip(),
+                })
+        return entries
+
     return {
         "header": header,
         "notes": notes,
@@ -768,4 +782,6 @@ def analyze_weekly_trend(
         "weekly_table": weekly_table,
         "category_notes": category_notes,
         "ai_payload": ai_payload,
+        "prev_prog_entries": _get_prog_entries(last_week_df),
+        "curr_prog_entries": _get_prog_entries(this_week_df),
     }

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { format, startOfMonth, endOfMonth } from "date-fns";
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, subWeeks, parseISO } from "date-fns";
 
 interface FilterState {
   startDate: string | null;
@@ -13,12 +13,15 @@ interface FilterState {
   setWorkStatus: (status: string) => void;
   setThisMonth: () => void;
   setLastMonth: () => void;
+  setThisWeek: () => void;
+  setLastWeek: () => void;
+  shiftWeekBack: () => void;
   setSelectedCustomerId: (id: number | null) => void;
 }
 
 export const useFilterStore = create<FilterState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       startDate: format(startOfMonth(new Date()), "yyyy-MM-dd"),
       endDate: format(endOfMonth(new Date()), "yyyy-MM-dd"),
       keyword: "",
@@ -41,6 +44,28 @@ export const useFilterStore = create<FilterState>()(
         set({
           startDate: format(startOfMonth(lastMonth), "yyyy-MM-dd"),
           endDate: format(lastMonth, "yyyy-MM-dd"),
+        });
+      },
+      setThisWeek: () => {
+        const today = new Date();
+        set({
+          startDate: format(startOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd"),
+          endDate: format(endOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd"),
+        });
+      },
+      setLastWeek: () => {
+        const lastWeek = subWeeks(new Date(), 1);
+        set({
+          startDate: format(startOfWeek(lastWeek, { weekStartsOn: 1 }), "yyyy-MM-dd"),
+          endDate: format(endOfWeek(lastWeek, { weekStartsOn: 1 }), "yyyy-MM-dd"),
+        });
+      },
+      shiftWeekBack: () => {
+        const current = get().startDate ? parseISO(get().startDate!) : new Date();
+        const prevWeek = subWeeks(current, 1);
+        set({
+          startDate: format(startOfWeek(prevWeek, { weekStartsOn: 1 }), "yyyy-MM-dd"),
+          endDate: format(endOfWeek(prevWeek, { weekStartsOn: 1 }), "yyyy-MM-dd"),
         });
       },
     }),

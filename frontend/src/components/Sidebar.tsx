@@ -43,6 +43,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
   const {
     startDate, endDate,
     setDateRange, setThisMonth, setLastMonth,
+    setThisWeek, setLastWeek, shiftWeekBack,
     selectedCustomerId, setSelectedCustomerId,
   } = useFilterStore();
   const queryClient = useQueryClient();
@@ -80,6 +81,27 @@ export default function Sidebar({ onClose }: SidebarProps) {
 
   const handleLastMonth = () => {
     setLastMonth();
+    const store = useFilterStore.getState();
+    setLocalStart(store.startDate ?? "");
+    setLocalEnd(store.endDate ?? "");
+  };
+
+  const handleThisWeek = () => {
+    setThisWeek();
+    const store = useFilterStore.getState();
+    setLocalStart(store.startDate ?? "");
+    setLocalEnd(store.endDate ?? "");
+  };
+
+  const handleLastWeek = () => {
+    setLastWeek();
+    const store = useFilterStore.getState();
+    setLocalStart(store.startDate ?? "");
+    setLocalEnd(store.endDate ?? "");
+  };
+
+  const handleShiftWeekBack = () => {
+    shiftWeekBack();
     const store = useFilterStore.getState();
     setLocalStart(store.startDate ?? "");
     setLocalEnd(store.endDate ?? "");
@@ -200,9 +222,10 @@ export default function Sidebar({ onClose }: SidebarProps) {
       {/* 날짜 필터 */}
       <div className="px-4 py-3 border-b border-gray-100">
         <p className="text-xs font-medium text-gray-500 mb-2">날짜 필터</p>
-        <div className="flex gap-1 mb-2">
-          <button onClick={handleThisMonth} className="text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-50">이번달</button>
-          <button onClick={handleLastMonth} className="text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-50">지난달</button>
+        <div className="grid grid-cols-3 gap-1 mb-2">
+          <button onClick={handleThisWeek} className="text-xs px-1.5 py-1 rounded border border-gray-200 hover:bg-gray-50 whitespace-nowrap">이번주</button>
+          <button onClick={handleLastWeek} className="text-xs px-1.5 py-1 rounded border border-gray-200 hover:bg-gray-50 whitespace-nowrap">저번주</button>
+          <button onClick={handleShiftWeekBack} className="text-xs px-1.5 py-1 rounded border border-blue-200 text-blue-600 hover:bg-blue-50 whitespace-nowrap">1주전 ◀</button>
         </div>
         <div className="space-y-1">
           <input type="date" value={localStart} onChange={(e) => setLocalStart(e.target.value)} className="w-full text-xs border border-gray-200 rounded px-2 py-1" />

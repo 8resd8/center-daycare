@@ -7,7 +7,7 @@ import { useFilterStore } from "@/store/filterStore";
 import { dailyRecordsApi } from "@/api/dailyRecords";
 import { weeklyReportsApi } from "@/api/weeklyReports";
 import { employeeEvaluationsApi } from "@/api/employeeEvaluations";
-import type { DailyRecord } from "@/types";
+import type { DailyRecord, WeeklyTableRow, ProgEntry } from "@/types";
 
 type MainTab = "weekly" | "daily";
 type WeeklySubTab = "basic" | "physical" | "cognitive" | "nursing" | "recovery";
@@ -91,6 +91,14 @@ export default function CareRecordsPage() {
     queryKey: ["daily-records", selectedCustomerId, startDate, endDate],
     queryFn: () => dailyRecordsApi.list({ customer_id: selectedCustomerId!, start_date: startDate ?? undefined, end_date: endDate ?? undefined }),
     enabled: !!selectedCustomerId,
+  });
+
+  // 전주/이번주 변화량 분석 자동 조회
+  const analysisQueryKey = ["weekly-analysis", selectedCustomerId, startDate, endDate];
+  const { data: analysisData, isLoading: loadingAnalysis } = useQuery({
+    queryKey: analysisQueryKey,
+    queryFn: () => weeklyReportsApi.analysis({ customer_id: selectedCustomerId!, start_date: startDate!, end_date: endDate! }),
+    enabled: !!selectedCustomerId && !!startDate && !!endDate,
   });
 
   // 기존 저장된 주간 보고서 자동 조회
@@ -187,12 +195,15 @@ export default function CareRecordsPage() {
     <div className="space-y-4">
       {/* 수급자 정보 헤더 */}
       {selectedCustomer && (
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <h2 className="text-lg font-bold text-gray-800">{selectedCustomer.name} 어르신</h2>
-          <div className="flex gap-4 mt-1 text-sm text-gray-500">
-            {selectedCustomer.grade && <span>등급: {selectedCustomer.grade}</span>}
-            {selectedCustomer.birth_date && <span>생년월일: {selectedCustomer.birth_date}</span>}
-            <span>기록 수: {selectedCustomer.record_count}건</span>
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
+          <div className="flex items-baseline gap-3">
+            <h2 className="text-base font-bold text-gray-800 whitespace-nowrap">{selectedCustomer.name} 어르신</h2>
+            <span className="text-xs text-gray-400 whitespace-nowrap">
+              {[
+                selectedCustomer.birth_date,
+                `기록 ${selectedCustomer.record_count}건`,
+              ].filter(Boolean).join("  ·  ")}
+            </span>
           </div>
         </div>
       )}
@@ -268,6 +279,18 @@ export default function CareRecordsPage() {
                   }
                 </div>
               </div>
+
+              {/* 지난주/이번주 변화량 */}
+              {(loadingAnalysis || analysisData) && (
+                <WeeklyChangePanel
+                  weeklyTable={analysisData?.weekly_table ?? []}
+                  prevRange={analysisData?.prev_range ?? null}
+                  currRange={analysisData?.curr_range ?? null}
+                  loading={loadingAnalysis}
+                  prevProgEntries={analysisData?.prev_prog_entries ?? []}
+                  currProgEntries={analysisData?.curr_prog_entries ?? []}
+                />
+              )}
 
               {/* AI 주간 보고서 생성 (선택된 수급자) */}
               <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -354,6 +377,153 @@ export default function CareRecordsPage() {
                 </>
               )}
             </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── 지난주/이번주 변화량 패널 ──────────────────────────────────────
+function WeeklyChangePanel({
+  weeklyTable,
+  prevRange,
+  currRange,
+  loading,
+  prevProgEntries,
+  currProgEntries,
+}: {
+  weeklyTable: WeeklyTableRow[];
+  prevRange: [string, string] | null;
+  currRange: [string, string] | null;
+  loading?: boolean;
+  prevProgEntries: ProgEntry[];
+  currProgEntries: ProgEntry[];
+}) {
+  const TABLE_COLS: { key: keyof WeeklyTableRow; label: string }[] = [
+    { key: "주간", label: "주간" },
+    { key: "출석일", label: "출석일" },
+    { key: "식사량(일반식)", label: "일반식" },
+    { key: "식사량(죽식)", label: "죽식" },
+    { key: "식사량(다진식)", label: "다진식" },
+    { key: "소변", label: "소변" },
+    { key: "대변", label: "대변" },
+    { key: "기저귀교환", label: "기저귀교환" },
+  ];
+
+  // MM-DD 형식
+  const fmt = (d: string) => d.slice(5);
+
+  const rangeLabel = (rowIdx: number) => {
+    const range = rowIdx === 0 ? prevRange : currRange;
+    if (!range) return null;
+    return `${fmt(range[0])} ~ ${fmt(range[1])}`;
+  };
+
+  const [progTab, setProgTab] = useState<"curr" | "prev">("curr");
+  const progEntries = progTab === "curr" ? currProgEntries : prevProgEntries;
+  const hasAnyProg = prevProgEntries.length > 0 || currProgEntries.length > 0;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="p-4 border-b border-gray-100 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-gray-700">지난주 / 이번주 변화량</h3>
+        {loading && <Loader2 size={13} className="animate-spin text-gray-400" />}
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <Loader2 size={20} className="animate-spin text-gray-300" />
+        </div>
+      ) : (
+        <>
+          {/* 출석/식사/배설 비교 테이블 */}
+          {weeklyTable.length > 0 && (
+            <div className="overflow-x-auto px-4 pt-3">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="bg-gray-50">
+                    {/* 주간 컬럼: 내용 길이에 맞춤 */}
+                    <th className="border border-gray-200 px-2 py-1.5 text-left whitespace-nowrap w-px font-medium text-gray-600">주간</th>
+                    {TABLE_COLS.slice(1).map((c) => (
+                      <th key={c.key} className="border border-gray-200 px-2 py-1.5 text-center whitespace-nowrap font-medium text-gray-600">
+                        {c.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {weeklyTable.map((row, i) => (
+                    <tr key={i} className={cn("text-center", row.주간 === "이번주" ? "bg-blue-50" : "")}>
+                      <td className="border border-gray-200 px-2 py-1.5 whitespace-nowrap w-px text-left font-semibold">
+                        {row.주간}
+                        {rangeLabel(i) && (
+                          <span className="ml-1 font-normal text-gray-400 text-[11px]">({rangeLabel(i)})</span>
+                        )}
+                      </td>
+                      {TABLE_COLS.slice(1).map((c) => (
+                        <td key={c.key} className="border border-gray-200 px-2 py-1.5 whitespace-nowrap">
+                          {String(row[c.key] ?? "-")}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* 카테고리별 점수 변화 */}
+          {hasAnyProg && (
+            <div className="px-4 pb-3">
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                {/* 탭 헤더 */}
+                <div className="flex border-b border-gray-200">
+                  {([
+                    { key: "curr" as const, label: "이번주 프로그램", count: currProgEntries.length },
+                    { key: "prev" as const, label: "지난주 프로그램", count: prevProgEntries.length },
+                  ]).map((t) => (
+                    <button
+                      key={t.key}
+                      onClick={() => setProgTab(t.key)}
+                      className={cn(
+                        "flex-1 py-1.5 text-xs font-medium transition-colors flex items-center justify-center gap-1",
+                        progTab === t.key
+                          ? "bg-blue-50 text-blue-700 border-b-2 border-blue-600"
+                          : "text-gray-500 hover:bg-gray-50"
+                      )}
+                    >
+                      {t.label}
+                      <span className={cn(
+                        "px-1.5 py-0.5 rounded-full text-[10px]",
+                        progTab === t.key ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-500"
+                      )}>
+                        {t.count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                {/* 탭 내용 */}
+                <div className="p-2.5">
+                  {progEntries.length > 0 ? (
+                    <div className="space-y-1">
+                      {progEntries.map((e, i) => (
+                        <div key={i} className="flex gap-2 text-xs">
+                          <span className="text-gray-400 whitespace-nowrap shrink-0">{e.date}</span>
+                          <span className="text-gray-700 break-all">{e.detail}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400 text-center py-3">해당 주 프로그램 항목 없음</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {weeklyTable.length === 0 && !hasAnyProg && (
+            <p className="text-center text-gray-400 text-xs py-6">해당 기간 분석 데이터가 없습니다.</p>
           )}
         </>
       )}

@@ -85,6 +85,45 @@ export interface WeeklyReport {
   report_text: string;
 }
 
+export interface WeeklyTableRow {
+  주간: string;
+  출석일: number;
+  "식사량(일반식)": string;
+  "식사량(죽식)": string;
+  "식사량(다진식)": string;
+  소변: string;
+  대변: string;
+  기저귀교환: string;
+}
+
+export interface WeeklyScoreItem {
+  label: string;
+  prev: number | null;
+  curr: number | null;
+  diff: number | null;
+  trend: string;
+}
+
+export interface WeeklyGenerateResult {
+  report_text: string;
+  weekly_table: WeeklyTableRow[];
+  scores: Record<string, WeeklyScoreItem>;
+}
+
+export interface ProgEntry {
+  date: string;
+  detail: string;
+}
+
+export interface WeeklyAnalysisResult {
+  weekly_table: WeeklyTableRow[];
+  scores: Record<string, WeeklyScoreItem>;
+  prev_range: [string, string] | null;
+  curr_range: [string, string] | null;
+  prev_prog_entries: ProgEntry[];
+  curr_prog_entries: ProgEntry[];
+}
+
 // ── AI 평가 ─────────────────────────────────────────────────
 export interface AiEvaluation {
   ai_eval_id: number | null;
