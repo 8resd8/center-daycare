@@ -40,6 +40,22 @@ def client(app):
 
 
 @pytest.fixture
+def viewer_client(app):
+    """VIEWER 역할 TestClient (RBAC 테스트용)."""
+    from backend.dependencies import get_current_user
+
+    app.dependency_overrides[get_current_user] = lambda: {
+        "user_id": 99,
+        "username": "viewer",
+        "name": "열람자",
+        "role": "VIEWER",
+    }
+    with TestClient(app, raise_server_exceptions=False) as c:
+        yield c
+    app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.fixture
 def unauth_client(app):
     """인증 오버라이드 없는 TestClient (401 테스트용)."""
     with TestClient(app, raise_server_exceptions=False) as c:
@@ -65,6 +81,21 @@ def _make_token(
         "name": name,
         "role": role,
         "exp": datetime.now(timezone.utc) + timedelta(hours=8),
+    }
+    return jwt.encode(payload, _TEST_SECRET, algorithm=_ALGORITHM)
+
+
+def _make_refresh_token(
+    user_id: int = 1,
+    token_type: str = "refresh",
+    expire_delta: timedelta | None = None,
+) -> str:
+    """테스트용 리프레시 토큰 생성."""
+    payload = {
+        "sub": str(user_id),
+        "user_id": user_id,
+        "type": token_type,
+        "exp": datetime.now(timezone.utc) + (expire_delta or timedelta(days=7)),
     }
     return jwt.encode(payload, _TEST_SECRET, algorithm=_ALGORITHM)
 

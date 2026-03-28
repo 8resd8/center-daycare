@@ -105,3 +105,37 @@ class TestDeleteDailyRecord:
         resp = client.delete("/api/daily-records/100")
         assert resp.status_code == 204
         mock_repo.delete_daily_record.assert_called_once_with(100)
+
+
+# ── 마스킹 테스트 ────────────────────────────────────────────────────
+
+
+class TestDailyRecordsMasking:
+    """VIEWER가 customers-with-records 조회 시 PII 마스킹 검증."""
+
+    @pytest.fixture
+    def mock_repo_for_viewer(self, app):
+        repo = make_mock_daily_info_repo()
+        from backend.dependencies import get_daily_info_repo
+        app.dependency_overrides[get_daily_info_repo] = lambda: repo
+        yield repo
+        app.dependency_overrides.pop(get_daily_info_repo, None)
+
+    def test_viewer_조회시_이름_마스킹(self, viewer_client, mock_repo_for_viewer):
+        mock_repo_for_viewer.get_customers_with_records.return_value = [
+            {
+                "customer_id": 1,
+                "name": "홍길동",
+                "birth_date": date(1950, 1, 1),
+                "grade": "3등급",
+                "recognition_no": "L123",
+                "record_count": 5,
+                "first_date": date(2024, 1, 1),
+                "last_date": date(2024, 1, 31),
+            }
+        ]
+        resp = viewer_client.get("/api/daily-records/customers-with-records")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data[0]["name"] == "홍**"
+        assert data[0]["grade"] == "**"

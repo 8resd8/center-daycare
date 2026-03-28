@@ -409,3 +409,136 @@ class TestEmployeeEvalHistory:
         assert data["user_id"] == 1
         assert len(data["records"]) == 1
         assert data["records"][0]["evaluation_type"] == "누락"
+
+
+# ── 마스킹 테스트 ────────────────────────────────────────────────────
+
+
+class TestEmployeeRankingsMasking:
+    """비ADMIN 사용자의 employee-rankings 이름 마스킹 검증."""
+
+    def test_viewer_이름_마스킹(self, viewer_client):
+        mock_enc = MagicMock()
+        mock_enc.return_value.safe_decrypt.return_value = "김요양"
+
+        cursor = MagicMock()
+        cursor.fetchall.return_value = [
+            {"user_id": 1, "name": "encrypted_name"}
+        ]
+        cursor.fetchone.return_value = {
+            "total_records": 5,
+            "excellent_count": 3,
+            "average_count": 1,
+            "improvement_count": 1,
+        }
+
+        @contextmanager
+        def _mock_db():
+            yield cursor
+
+        with (
+            patch("modules.db_connection.db_query", _mock_db),
+            patch("backend.routers.dashboard.EncryptionService", mock_enc),
+        ):
+            resp = viewer_client.get("/api/dashboard/employee-rankings")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data[0]["name"] == "김**"
+
+    def test_admin_이름_원본(self, client):
+        mock_enc = MagicMock()
+        mock_enc.return_value.safe_decrypt.return_value = "김요양"
+
+        cursor = MagicMock()
+        cursor.fetchall.return_value = [
+            {"user_id": 1, "name": "encrypted_name"}
+        ]
+        cursor.fetchone.return_value = {
+            "total_records": 5,
+            "excellent_count": 3,
+            "average_count": 1,
+            "improvement_count": 1,
+        }
+
+        @contextmanager
+        def _mock_db():
+            yield cursor
+
+        with (
+            patch("modules.db_connection.db_query", _mock_db),
+            patch("backend.routers.dashboard.EncryptionService", mock_enc),
+        ):
+            resp = client.get("/api/dashboard/employee-rankings")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data[0]["name"] == "김요양"
+
+
+class TestEmpEvalRankingsMasking:
+    """비ADMIN 사용자의 emp-eval-rankings 이름 마스킹 검증."""
+
+    def test_viewer_이름_마스킹(self, viewer_client):
+        mock_enc = MagicMock()
+        mock_enc.return_value.safe_decrypt.return_value = "김요양"
+
+        cursor = MagicMock()
+        cursor.fetchall.return_value = [
+            {
+                "user_id": 1,
+                "name": "encrypted_name",
+                "total_count": 5,
+                "cnt_누락": 3,
+                "cnt_내용부족": 1,
+                "cnt_오타": 1,
+                "cnt_문법": 0,
+                "cnt_오류": 0,
+            }
+        ]
+
+        @contextmanager
+        def _mock_db():
+            yield cursor
+
+        with (
+            patch("modules.db_connection.db_query", _mock_db),
+            patch("backend.routers.dashboard.EncryptionService", mock_enc),
+        ):
+            resp = viewer_client.get("/api/dashboard/emp-eval-rankings")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data[0]["name"] == "김**"
+
+    def test_admin_이름_원본(self, client):
+        mock_enc = MagicMock()
+        mock_enc.return_value.safe_decrypt.return_value = "김요양"
+
+        cursor = MagicMock()
+        cursor.fetchall.return_value = [
+            {
+                "user_id": 1,
+                "name": "encrypted_name",
+                "total_count": 5,
+                "cnt_누락": 3,
+                "cnt_내용부족": 1,
+                "cnt_오타": 1,
+                "cnt_문법": 0,
+                "cnt_오류": 0,
+            }
+        ]
+
+        @contextmanager
+        def _mock_db():
+            yield cursor
+
+        with (
+            patch("modules.db_connection.db_query", _mock_db),
+            patch("backend.routers.dashboard.EncryptionService", mock_enc),
+        ):
+            resp = client.get("/api/dashboard/emp-eval-rankings")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data[0]["name"] == "김요양"

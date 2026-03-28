@@ -314,3 +314,145 @@ class TestProtectedEndpoints:
         # 422가 아님(스키마 오류), 401임(자격증명 오류)
         assert res.status_code != 422
         assert res.status_code in (200, 401)
+
+
+# ── 리프레시 토큰 ────────────────────────────────────────────────────
+
+
+class TestRefresh:
+    """POST /auth/refresh 엔드포인트 테스트."""
+
+    def _make_refresh(self, user_id=1, token_type="refresh", expired=False):
+        exp = (
+            datetime.now(timezone.utc) - timedelta(hours=1)
+            if expired
+            else datetime.now(timezone.utc) + timedelta(days=7)
+        )
+        payload = {"sub": str(user_id), "user_id": user_id, "type": token_type, "exp": exp}
+        return jwt.encode(payload, _TEST_SECRET, algorithm=_ALGORITHM)
+
+    def _make_full_user(self, user_id=1):
+        return {
+            "user_id": user_id,
+            "username": "testuser",
+            "name": "테스트",
+            "role": "EMPLOYEE",
+            "work_status": "재직",
+        }
+
+    def test_유효한_refresh_token_200(self):
+        token = self._make_refresh()
+        full_user = self._make_full_user()
+        repo = MagicMock()
+        repo.get_user.return_value = full_user
+        repo.find_by_user_id_with_auth.return_value = full_user
+        app.dependency_overrides[get_user_repo] = lambda: repo
+        try:
+            with TestClient(app, raise_server_exceptions=False) as client:
+                res = client.post("/api/auth/refresh", cookies={"refresh_token": token})
+        finally:
+            app.dependency_overrides.pop(get_user_repo, None)
+
+        assert res.status_code == 200
+        assert res.json()["username"] == "testuser"
+        assert "access_token" in res.cookies
+
+    def test_refresh_token_없으면_401(self):
+        with TestClient(app, raise_server_exceptions=False) as client:
+            res = client.post("/api/auth/refresh")
+        assert res.status_code == 401
+
+    def test_만료된_refresh_token_401(self):
+        token = self._make_refresh(expired=True)
+        with TestClient(app, raise_server_exceptions=False) as client:
+            res = client.post("/api/auth/refresh", cookies={"refresh_token": token})
+        assert res.status_code == 401
+
+    def test_잘못된_형식_401(self):
+        with TestClient(app, raise_server_exceptions=False) as client:
+            res = client.post("/api/auth/refresh", cookies={"refresh_token": "invalid.jwt.token"})
+        assert res.status_code == 401
+
+    def test_access_token을_refresh로_사용하면_401(self):
+        """type이 'refresh'가 아닌 토큰은 거부."""
+        token = self._make_refresh(token_type="access")
+        with TestClient(app, raise_server_exceptions=False) as client:
+            res = client.post("/api/auth/refresh", cookies={"refresh_token": token})
+        assert res.status_code == 401
+
+    def test_get_user_None이면_401(self):
+        token = self._make_refresh()
+        repo = MagicMock()
+        repo.get_user.return_value = None
+        app.dependency_overrides[get_user_repo] = lambda: repo
+        try:
+            with TestClient(app, raise_server_exceptions=False) as client:
+                res = client.post("/api/auth/refresh", cookies={"refresh_token": token})
+        finally:
+            app.dependency_overrides.pop(get_user_repo, None)
+        assert res.status_code == 401
+
+    def test_find_by_user_id_with_auth_None이면_401(self):
+        token = self._make_refresh()
+        repo = MagicMock()
+        repo.get_user.return_value = self._make_full_user()
+        repo.find_by_user_id_with_auth.return_value = None
+        app.dependency_overrides[get_user_repo] = lambda: repo
+        try:
+            with TestClient(app, raise_server_exceptions=False) as client:
+                res = client.post("/api/auth/refresh", cookies={"refresh_token": token})
+        finally:
+            app.dependency_overrides.pop(get_user_repo, None)
+        assert res.status_code == 401
+
+
+# ── JWT 엣지 케이스 ──────────────────────────────────────────────────
+
+
+class TestJwtEdgeCases:
+    def test_sub_필드_누락_토큰(self):
+        """sub 없이 다른 필드만 있는 토큰으로 /auth/me 호출."""
+        payload = {
+            "user_id": 1,
+            "username": "test",
+            "name": "테스트",
+            "role": "ADMIN",
+            "exp": datetime.now(timezone.utc) + timedelta(hours=8),
+        }
+        token = jwt.encode(payload, _TEST_SECRET, algorithm=_ALGORITHM)
+        with TestClient(app, raise_server_exceptions=False) as client:
+            res = client.get("/api/auth/me", cookies={"access_token": token})
+        # sub 없어도 다른 필드가 있으면 200 (username/name/role 기반)
+        assert res.status_code == 200
+
+    def test_다른_secret으로_서명된_토큰(self):
+        payload = {
+            "sub": "1",
+            "user_id": 1,
+            "username": "test",
+            "name": "테스트",
+            "role": "ADMIN",
+            "exp": datetime.now(timezone.utc) + timedelta(hours=8),
+        }
+        token = jwt.encode(payload, "wrong-secret-key", algorithm=_ALGORITHM)
+        with TestClient(app, raise_server_exceptions=False) as client:
+            res = client.get("/api/auth/me", cookies={"access_token": token})
+        assert res.status_code == 401
+
+    def test_role_없는_JWT로_admin_엔드포인트_접근(self):
+        """role이 없는 JWT로 require_admin 엔드포인트 접근 시 403."""
+        payload = {
+            "sub": "1",
+            "user_id": 1,
+            "username": "test",
+            "name": "테스트",
+            "exp": datetime.now(timezone.utc) + timedelta(hours=8),
+        }
+        token = jwt.encode(payload, _TEST_SECRET, algorithm=_ALGORITHM)
+        with TestClient(app, raise_server_exceptions=False) as client:
+            res = client.post(
+                "/api/customers",
+                json={"name": "test", "gender": "남"},
+                cookies={"access_token": token},
+            )
+        assert res.status_code == 403

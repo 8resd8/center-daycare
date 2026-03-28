@@ -7,6 +7,7 @@
 """
 
 import pytest
+from unittest.mock import MagicMock, patch
 from .conftest import make_mock_employee_repo, SAMPLE_EMPLOYEE
 
 
@@ -118,3 +119,34 @@ class TestDeleteEmployee:
         mock_repo.soft_delete_user.return_value = 0
         resp = client.delete("/api/employees/9999")
         assert resp.status_code == 404
+
+
+# ── 마스킹 테스트 ────────────────────────────────────────────────────
+
+
+class TestEmployeeMasking:
+    """VIEWER가 직원 조회 시 PII 마스킹 검증."""
+
+    @pytest.fixture
+    def mock_repo_for_viewer(self, app):
+        repo = make_mock_employee_repo()
+        from backend.dependencies import get_user_repo
+        app.dependency_overrides[get_user_repo] = lambda: repo
+        yield repo
+        app.dependency_overrides.pop(get_user_repo, None)
+
+    def test_viewer_목록_조회시_이름_마스킹(self, viewer_client, mock_repo_for_viewer):
+        mock_repo_for_viewer.list_users.return_value = [SAMPLE_EMPLOYEE]
+        resp = viewer_client.get("/api/employees")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data[0]["name"] == "김**"
+        assert data[0]["hire_date"] == "****-**-**"
+
+    def test_viewer_개별_조회시_마스킹(self, viewer_client, mock_repo_for_viewer):
+        mock_repo_for_viewer.get_user.return_value = SAMPLE_EMPLOYEE
+        resp = viewer_client.get("/api/employees/1")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["name"] == "김**"
+        assert data["job_type"] == "***"

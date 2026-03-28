@@ -7,7 +7,7 @@
 """
 
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from .conftest import make_mock_customer_repo, SAMPLE_CUSTOMER
 
 
@@ -120,3 +120,35 @@ class TestDeleteCustomer:
         mock_repo.delete_customer.return_value = 0
         resp = client.delete("/api/customers/9999")
         assert resp.status_code == 404
+
+
+# ── 마스킹 테스트 ────────────────────────────────────────────────────
+
+
+class TestCustomerMasking:
+    """VIEWER가 수급자 조회 시 PII 마스킹 검증."""
+
+    @pytest.fixture
+    def mock_repo_for_viewer(self, app):
+        repo = make_mock_customer_repo()
+        from backend.dependencies import get_customer_repo
+        app.dependency_overrides[get_customer_repo] = lambda: repo
+        yield repo
+        app.dependency_overrides.pop(get_customer_repo, None)
+
+    def test_viewer_목록_조회시_이름_마스킹(self, viewer_client, mock_repo_for_viewer):
+        mock_repo_for_viewer.list_customers.return_value = [SAMPLE_CUSTOMER]
+        with patch("backend.routers.customers._audit_repo", return_value=MagicMock()):
+            resp = viewer_client.get("/api/customers")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data[0]["name"] == "홍**"
+        assert data[0]["grade"] == "**"
+
+    def test_admin_목록_조회시_원본_반환(self, client, mock_repo_for_viewer):
+        mock_repo_for_viewer.list_customers.return_value = [SAMPLE_CUSTOMER]
+        resp = client.get("/api/customers")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data[0]["name"] == "홍길동"
+        assert data[0]["grade"] == "3등급"
