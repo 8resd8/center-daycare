@@ -1,6 +1,23 @@
 from typing import Dict, List, Optional
 from datetime import date
 from .base import BaseRepository
+from backend.encryption import EncryptionService
+
+
+def _get_enc() -> EncryptionService:
+    return EncryptionService()
+
+
+def _decrypt_name(row: Optional[Dict], *cols: str) -> Optional[Dict]:
+    """DB 행의 지정 컬럼을 복호화."""
+    if row is None:
+        return None
+    enc = _get_enc()
+    result = dict(row)
+    for col in cols:
+        if result.get(col) is not None:
+            result[col] = enc.safe_decrypt(str(result[col]))
+    return result
 
 
 class EmployeeEvaluationRepository(BaseRepository):
@@ -47,6 +64,23 @@ class EmployeeEvaluationRepository(BaseRepository):
             )
         )
     
+    def get_evaluation_by_id(self, emp_eval_id: int) -> Optional[Dict]:
+        """Get a single evaluation by its ID."""
+        query = """
+            SELECT
+                ee.emp_eval_id, ee.record_id, ee.target_date, ee.category, ee.evaluation_type,
+                ee.score, ee.comment, ee.evaluation_date,
+                ee.target_user_id, ee.evaluator_user_id,
+                tu.name AS target_user_name,
+                eu.name AS evaluator_user_name
+            FROM employee_evaluations ee
+            LEFT JOIN users tu ON ee.target_user_id = tu.user_id
+            LEFT JOIN users eu ON ee.evaluator_user_id = eu.user_id
+            WHERE ee.emp_eval_id = %s
+        """
+        row = self._execute_query_one(query, (emp_eval_id,))
+        return _decrypt_name(row, "target_user_name", "evaluator_user_name")
+
     def get_evaluations_by_record(self, record_id: int) -> List[Dict]:
         """Get all employee evaluations for a specific record."""
         query = """
@@ -62,7 +96,8 @@ class EmployeeEvaluationRepository(BaseRepository):
             WHERE ee.record_id = %s
             ORDER BY ee.created_at DESC
         """
-        return self._execute_query(query, (record_id,))
+        rows = self._execute_query(query, (record_id,))
+        return [_decrypt_name(r, "target_user_name", "evaluator_user_name") for r in rows]
     
     def get_user_id_by_name(self, name: str) -> Optional[int]:
         """Get user ID by name."""
@@ -73,7 +108,8 @@ class EmployeeEvaluationRepository(BaseRepository):
     def get_all_users(self) -> List[Dict]:
         """Get all users for dropdown selection."""
         query = "SELECT user_id, name FROM users ORDER BY name"
-        return self._execute_query(query, ())
+        rows = self._execute_query(query, ())
+        return [_decrypt_name(r, "name") for r in rows]
     
     def delete_evaluation(self, emp_eval_id: int) -> int:
         """Delete an employee evaluation by ID."""

@@ -12,6 +12,10 @@ ALTER TABLE users
   MODIFY COLUMN name          VARCHAR(500) NOT NULL,
   MODIFY COLUMN birth_date    VARCHAR(500) NULL;
 
+-- 직원 평가: record_id NULL 허용 (대시보드에서 직접 추가 시 일일기록 없음)
+ALTER TABLE employee_evaluations
+  MODIFY COLUMN record_id INT NULL;
+
 -- 감사 로그 테이블
 CREATE TABLE IF NOT EXISTS audit_logs (
   log_id     BIGINT AUTO_INCREMENT PRIMARY KEY,

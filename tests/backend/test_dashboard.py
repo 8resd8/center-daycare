@@ -4,6 +4,7 @@ db_query를 직접 사용하는 엔드포인트들을 mock으로 테스트.
 """
 
 import pytest
+from datetime import date
 from unittest.mock import MagicMock, patch
 from contextlib import contextmanager
 
@@ -542,3 +543,206 @@ class TestEmpEvalRankingsMasking:
         assert resp.status_code == 200
         data = resp.json()
         assert data[0]["name"] == "김요양"
+
+
+# ── 기간 비교 테스트 ─────────────────────────────────────────────
+
+
+class TestPeriodComparison:
+    def test_기간_비교_데이터_반환(self, client):
+        cursor = MagicMock()
+        # 현재 기간 fetchall → 이전 기간 fetchall
+        cursor.fetchall.side_effect = [
+            [{"evaluation_type": "누락", "cnt": 10}, {"evaluation_type": "오타", "cnt": 5}],
+            [{"evaluation_type": "누락", "cnt": 7}, {"evaluation_type": "오타", "cnt": 3}],
+        ]
+
+        @contextmanager
+        def _mock_db():
+            yield cursor
+
+        with patch("modules.db_connection.db_query", _mock_db):
+            resp = client.get(
+                "/api/dashboard/period-comparison?start_date=2024-01-15&end_date=2024-01-31"
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["current_period"]["total"] == 15
+        assert data["previous_period"]["total"] == 10
+        assert data["change_rate"] == 50.0
+        assert "누락" in data["current_period"]["by_type"]
+
+    def test_날짜_없으면_빈_데이터(self, client):
+        resp = client.get("/api/dashboard/period-comparison")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["current_period"]["total"] == 0
+        assert data["previous_period"]["total"] == 0
+        assert data["change_rate"] is None
+
+    def test_이전기간_0건이면_change_rate_null(self, client):
+        cursor = MagicMock()
+        cursor.fetchall.side_effect = [
+            [{"evaluation_type": "누락", "cnt": 5}],  # 현재
+            [],  # 이전: 0건
+        ]
+
+        @contextmanager
+        def _mock_db():
+            yield cursor
+
+        with patch("modules.db_connection.db_query", _mock_db):
+            resp = client.get(
+                "/api/dashboard/period-comparison?start_date=2024-01-15&end_date=2024-01-31"
+            )
+
+        data = resp.json()
+        assert data["change_rate"] is None
+        assert data["current_period"]["total"] == 5
+
+
+# ── KPI 요약 테스트 ──────────────────────────────────────────────
+
+
+class TestKpiSummary:
+    def test_KPI_delta_포함_반환(self, client):
+        cursor = MagicMock()
+        # 순서: total_employees → curr_total → curr_high_risk → curr_emp_cnt
+        #                        → prev_total → prev_high_risk → prev_emp_cnt
+        cursor.fetchone.side_effect = [
+            {"cnt": 14},    # total_employees
+            {"total": 45},  # curr total
+            {"cnt": 3},     # curr high_risk
+            {"emp_cnt": 10},  # curr distinct employees
+            {"total": 30},  # prev total
+            {"cnt": 2},     # prev high_risk
+            {"emp_cnt": 8},   # prev distinct employees
+        ]
+
+        @contextmanager
+        def _mock_db():
+            yield cursor
+
+        with patch("modules.db_connection.db_query", _mock_db):
+            resp = client.get(
+                "/api/dashboard/kpi-summary?start_date=2024-01-15&end_date=2024-01-31"
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_issues"] == 45
+        assert data["total_issues_prev"] == 30
+        assert data["total_issues_delta"] == 50.0
+        assert data["high_risk_count"] == 3
+        assert data["total_employees"] == 14
+        assert data["avg_per_employee"] == 4.5
+
+    def test_이전기간_0건_delta_null(self, client):
+        cursor = MagicMock()
+        cursor.fetchone.side_effect = [
+            {"cnt": 10},    # total_employees
+            {"total": 5},   # curr total
+            {"cnt": 0},     # curr high_risk
+            {"emp_cnt": 3},   # curr distinct employees
+            {"total": 0},   # prev total
+            {"cnt": 0},     # prev high_risk
+            {"emp_cnt": 0},   # prev distinct employees
+        ]
+
+        @contextmanager
+        def _mock_db():
+            yield cursor
+
+        with patch("modules.db_connection.db_query", _mock_db):
+            resp = client.get(
+                "/api/dashboard/kpi-summary?start_date=2024-01-15&end_date=2024-01-31"
+            )
+
+        data = resp.json()
+        assert data["total_issues_delta"] is None
+        assert data["avg_per_employee_delta"] is None
+
+    def test_날짜_필터_미적용시_prev_0(self, client):
+        cursor = MagicMock()
+        cursor.fetchone.side_effect = [
+            {"cnt": 10},    # total_employees
+            {"total": 20},  # curr total (전체)
+            {"cnt": 1},     # curr high_risk
+            {"emp_cnt": 5},   # curr distinct employees
+        ]
+
+        @contextmanager
+        def _mock_db():
+            yield cursor
+
+        with patch("modules.db_connection.db_query", _mock_db):
+            resp = client.get("/api/dashboard/kpi-summary")
+
+        data = resp.json()
+        assert data["total_issues"] == 20
+        assert data["total_issues_prev"] == 0
+        assert data["total_issues_delta"] is None
+
+
+# ── 직원별 월별 추이 테스트 ──────────────────────────────────────
+
+
+class TestEmployeeMonthlyTrend:
+    def test_월별_추이_반환(self, client):
+        cursor = MagicMock()
+        cursor.fetchone.side_effect = [
+            {"user_id": 1},  # user exists
+        ]
+        cursor.fetchall.return_value = [
+            {"month": "2024-01", "count": 3},
+            {"month": "2024-02", "count": 5},
+        ]
+
+        @contextmanager
+        def _mock_db():
+            yield cursor
+
+        with patch("modules.db_connection.db_query", _mock_db):
+            resp = client.get("/api/dashboard/employee/1/monthly-trend")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 2
+        assert data[0]["month"] == "2024-01"
+        assert data[1]["count"] == 5
+
+    def test_직원_없으면_404(self, client):
+        cursor = MagicMock()
+        cursor.fetchone.return_value = None
+
+        @contextmanager
+        def _mock_db():
+            yield cursor
+
+        with patch("modules.db_connection.db_query", _mock_db):
+            resp = client.get("/api/dashboard/employee/9999/monthly-trend")
+
+        assert resp.status_code == 404
+
+    def test_months_파라미터(self, client):
+        cursor = MagicMock()
+        cursor.fetchone.side_effect = [{"user_id": 1}]
+        cursor.fetchall.return_value = [
+            {"month": "2024-01", "count": 2},
+        ]
+
+        @contextmanager
+        def _mock_db():
+            yield cursor
+
+        with patch("modules.db_connection.db_query", _mock_db):
+            resp = client.get("/api/dashboard/employee/1/monthly-trend?months=3")
+
+        assert resp.status_code == 200
+        # months 파라미터가 SQL에 전달되었는지 확인
+        call_args = cursor.execute.call_args_list
+        # 두 번째 execute 호출 (첫 번째는 user 존재 확인)
+        assert len(call_args) >= 2
+        second_call_params = call_args[1][0][1]  # (query, params)의 params
+        assert second_call_params == (1, 3)

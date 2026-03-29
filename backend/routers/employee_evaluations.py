@@ -68,11 +68,9 @@ def create_employee_evaluation(
         comment=body.comment,
     )
 
-    if body.record_id:
-        evals = repo.get_evaluations_by_record(body.record_id)
-        for e in evals:
-            if e["emp_eval_id"] == emp_eval_id:
-                return e
+    result = repo.get_evaluation_by_id(emp_eval_id)
+    if result:
+        return result
 
     raise HTTPException(status_code=500, detail="평가 저장 실패")
 
