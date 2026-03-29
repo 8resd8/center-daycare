@@ -227,6 +227,34 @@ export interface EmpEvalHistory {
   records: EmpEvalHistoryRecord[];
 }
 
+// ── 기간 비교 / KPI / 월별 추이 ─────────────────────────────
+export interface PeriodData {
+  start: string | null;
+  end: string | null;
+  total: number;
+  by_type: Record<string, number>;
+}
+export interface PeriodComparison {
+  current_period: PeriodData;
+  previous_period: PeriodData;
+  change_rate: number | null;
+}
+export interface KpiSummary {
+  total_issues: number;
+  total_issues_prev: number;
+  total_issues_delta: number | null;
+  avg_per_employee: number | null;
+  avg_per_employee_prev: number | null;
+  avg_per_employee_delta: number | null;
+  high_risk_count: number;
+  high_risk_count_prev: number;
+  total_employees: number;
+}
+export interface EmployeeMonthlyTrend {
+  month: string;
+  count: number;
+}
+
 // ── 업로드 ───────────────────────────────────────────────────
 export interface UploadResult {
   file_id: string;

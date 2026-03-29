@@ -8,6 +8,9 @@ import type {
   EmpEvalCategoryItem,
   EmpEvalRankingItem,
   EmpEvalHistory,
+  PeriodComparison,
+  KpiSummary,
+  EmployeeMonthlyTrend,
 } from "@/types";
 
 const params = (start_date?: string, end_date?: string) =>
@@ -75,5 +78,27 @@ export const dashboardApi = {
       .get<EmpEvalHistory>(`/dashboard/employee/${user_id}/emp-eval-history`, {
         params: params(start_date, end_date),
       })
+      .then((r) => r.data),
+
+  periodComparison: (start_date?: string, end_date?: string) =>
+    api
+      .get<PeriodComparison>("/dashboard/period-comparison", {
+        params: params(start_date, end_date),
+      })
+      .then((r) => r.data),
+
+  kpiSummary: (start_date?: string, end_date?: string) =>
+    api
+      .get<KpiSummary>("/dashboard/kpi-summary", {
+        params: params(start_date, end_date),
+      })
+      .then((r) => r.data),
+
+  employeeMonthlyTrend: (user_id: number, months?: number) =>
+    api
+      .get<EmployeeMonthlyTrend[]>(
+        `/dashboard/employee/${user_id}/monthly-trend`,
+        { params: months ? { months } : {} }
+      )
       .then((r) => r.data),
 };

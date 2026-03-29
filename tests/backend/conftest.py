@@ -155,6 +155,7 @@ def make_mock_employee_evaluation_repo():
     repo = MagicMock()
     repo.get_all_users.return_value = []
     repo.get_evaluations_by_record.return_value = []
+    repo.get_evaluation_by_id.return_value = None
     repo.find_existing_evaluation.return_value = None
     repo.save_evaluation.return_value = 1
     repo.update_evaluation.return_value = 1

@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from typing import Optional
-from datetime import date
+from datetime import date, timedelta
 
 from backend.dependencies import get_current_user
 from backend.encryption import EncryptionService, mask_name, is_admin
@@ -472,3 +472,163 @@ def get_employee_eval_history(
             for r in records
         ],
     }
+
+
+@router.get("/dashboard/period-comparison")
+def get_period_comparison(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+):
+    """선택 기간 vs 이전 기간 유형별 지적 건수 비교."""
+    from modules.db_connection import db_query
+
+    empty_period = {"start": None, "end": None, "total": 0, "by_type": {}}
+    if not start_date or not end_date:
+        return {
+            "current_period": empty_period,
+            "previous_period": empty_period,
+            "change_rate": None,
+        }
+
+    period_length = (end_date - start_date).days
+    prev_end = start_date - timedelta(days=1)
+    prev_start = prev_end - timedelta(days=period_length)
+
+    def _fetch_period(cursor, sd, ed):
+        cursor.execute(
+            "SELECT evaluation_type, COUNT(*) as cnt "
+            "FROM employee_evaluations "
+            "WHERE evaluation_date BETWEEN %s AND %s "
+            "GROUP BY evaluation_type",
+            (sd, ed),
+        )
+        rows = cursor.fetchall()
+        by_type = {r["evaluation_type"]: r["cnt"] for r in rows}
+        total = sum(by_type.values())
+        return {"start": str(sd), "end": str(ed), "total": total, "by_type": by_type}
+
+    with db_query() as cursor:
+        current = _fetch_period(cursor, start_date, end_date)
+        previous = _fetch_period(cursor, prev_start, prev_end)
+
+    change_rate = None
+    if previous["total"] > 0:
+        change_rate = round((current["total"] - previous["total"]) / previous["total"] * 100, 2)
+
+    return {
+        "current_period": current,
+        "previous_period": previous,
+        "change_rate": change_rate,
+    }
+
+
+@router.get("/dashboard/kpi-summary")
+def get_kpi_summary(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+):
+    """KPI 카드에 필요한 지표 + 이전 기간 대비 delta."""
+    from modules.db_connection import db_query
+
+    def _fetch_kpi(cursor, sd, ed):
+        if sd and ed:
+            cursor.execute(
+                "SELECT COUNT(*) as total FROM employee_evaluations "
+                "WHERE evaluation_date BETWEEN %s AND %s",
+                (sd, ed),
+            )
+        else:
+            cursor.execute("SELECT COUNT(*) as total FROM employee_evaluations")
+        total = cursor.fetchone()["total"]
+
+        if sd and ed:
+            cursor.execute(
+                "SELECT COUNT(*) as cnt FROM ("
+                "  SELECT target_user_id FROM employee_evaluations "
+                "  WHERE evaluation_date BETWEEN %s AND %s "
+                "  GROUP BY target_user_id HAVING COUNT(*) >= 5"
+                ") sub",
+                (sd, ed),
+            )
+        else:
+            cursor.execute(
+                "SELECT COUNT(*) as cnt FROM ("
+                "  SELECT target_user_id FROM employee_evaluations "
+                "  GROUP BY target_user_id HAVING COUNT(*) >= 5"
+                ") sub"
+            )
+        high_risk = cursor.fetchone()["cnt"]
+
+        if sd and ed:
+            cursor.execute(
+                "SELECT COUNT(DISTINCT target_user_id) as emp_cnt "
+                "FROM employee_evaluations "
+                "WHERE evaluation_date BETWEEN %s AND %s",
+                (sd, ed),
+            )
+        else:
+            cursor.execute(
+                "SELECT COUNT(DISTINCT target_user_id) as emp_cnt "
+                "FROM employee_evaluations"
+            )
+        emp_cnt = cursor.fetchone()["emp_cnt"]
+        avg = round(total / emp_cnt, 1) if emp_cnt > 0 else None
+
+        return total, avg, high_risk
+
+    with db_query() as cursor:
+        cursor.execute("SELECT COUNT(*) as cnt FROM users WHERE work_status = '재직'")
+        total_employees = cursor.fetchone()["cnt"]
+
+        curr_total, curr_avg, curr_high = _fetch_kpi(cursor, start_date, end_date)
+
+        # 이전 기간 계산
+        prev_total, prev_avg, prev_high = 0, None, 0
+        if start_date and end_date:
+            period_length = (end_date - start_date).days
+            prev_end = start_date - timedelta(days=1)
+            prev_start = prev_end - timedelta(days=period_length)
+            prev_total, prev_avg, prev_high = _fetch_kpi(cursor, prev_start, prev_end)
+
+    def _delta(curr, prev):
+        if prev is None or prev == 0:
+            return None
+        return round((curr - prev) / prev * 100, 1)
+
+    return {
+        "total_issues": curr_total,
+        "total_issues_prev": prev_total,
+        "total_issues_delta": _delta(curr_total, prev_total),
+        "avg_per_employee": curr_avg,
+        "avg_per_employee_prev": prev_avg,
+        "avg_per_employee_delta": _delta(curr_avg, prev_avg) if curr_avg is not None and prev_avg is not None else None,
+        "high_risk_count": curr_high,
+        "high_risk_count_prev": prev_high,
+        "total_employees": total_employees,
+    }
+
+
+@router.get("/dashboard/employee/{user_id}/monthly-trend")
+def get_employee_monthly_trend(
+    user_id: int,
+    months: int = Query(6, ge=1, le=24),
+):
+    """직원별 최근 N개월 월별 지적 건수."""
+    from modules.db_connection import db_query
+
+    with db_query() as cursor:
+        cursor.execute("SELECT user_id FROM users WHERE user_id = %s", (user_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="직원을 찾을 수 없습니다.")
+
+        cursor.execute(
+            "SELECT CONCAT(YEAR(evaluation_date), '-', LPAD(MONTH(evaluation_date), 2, '0')) as month, "
+            "COUNT(*) as count "
+            "FROM employee_evaluations "
+            "WHERE target_user_id = %s AND evaluation_date >= DATE_SUB(CURDATE(), INTERVAL %s MONTH) "
+            "GROUP BY month ORDER BY month",
+            (user_id, months),
+        )
+        rows = cursor.fetchall()
+
+    return [{"month": r["month"], "count": r["count"]} for r in rows]

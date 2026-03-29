@@ -50,7 +50,7 @@ class TestCreateEmployeeEvaluation:
         """신규 평가 저장 시 201 + 모든 필수 필드 반환."""
         mock_repo.find_existing_evaluation.return_value = None
         mock_repo.save_evaluation.return_value = 1
-        mock_repo.get_evaluations_by_record.return_value = [SAMPLE_EMPLOYEE_EVALUATION]
+        mock_repo.get_evaluation_by_id.return_value = SAMPLE_EMPLOYEE_EVALUATION
 
         resp = client.post("/api/employee-evaluations", json=self.PAYLOAD)
         assert resp.status_code == 201
@@ -67,7 +67,7 @@ class TestCreateEmployeeEvaluation:
     def test_신규_평가_필드값_정확성(self, client, mock_repo):
         mock_repo.find_existing_evaluation.return_value = None
         mock_repo.save_evaluation.return_value = 1
-        mock_repo.get_evaluations_by_record.return_value = [SAMPLE_EMPLOYEE_EVALUATION]
+        mock_repo.get_evaluation_by_id.return_value = SAMPLE_EMPLOYEE_EVALUATION
 
         resp = client.post("/api/employee-evaluations", json=self.PAYLOAD)
         data = resp.json()
@@ -104,25 +104,23 @@ class TestCreateEmployeeEvaluation:
         assert "target_user_name" in data
         assert "evaluator_user_name" in data
 
-    def test_record_id_없을때_신규_저장(self, client, mock_repo):
-        """record_id 없으면 중복 검사 없이 바로 저장 시도."""
+    def test_record_id_없을때_신규_저장_201(self, client, mock_repo):
+        """record_id 없으면 중복 검사 없이 바로 저장 → get_evaluation_by_id로 반환."""
         payload = {**self.PAYLOAD, "record_id": None}
         mock_repo.save_evaluation.return_value = 1
-        # record_id 없으면 get_evaluations_by_record 호출 안 됨 → 500 발생 경로
-        # 라우터는 raise HTTPException(500)으로 끝남
+        mock_repo.get_evaluation_by_id.return_value = {
+            **SAMPLE_EMPLOYEE_EVALUATION, "record_id": None,
+        }
         resp = client.post("/api/employee-evaluations", json=payload)
-        # record_id None이면 save 후 get 호출 없어 500
-        assert resp.status_code in (201, 500)  # 현재 동작 문서화
+        assert resp.status_code == 201
         mock_repo.find_existing_evaluation.assert_not_called()
+        mock_repo.get_evaluation_by_id.assert_called_once_with(1)
 
-    def test_save_후_목록에_없으면_500(self, client, mock_repo):
-        """저장은 됐지만 get_evaluations_by_record에 없으면 500."""
+    def test_save_후_조회_실패하면_500(self, client, mock_repo):
+        """저장은 됐지만 get_evaluation_by_id가 None이면 500."""
         mock_repo.find_existing_evaluation.return_value = None
         mock_repo.save_evaluation.return_value = 999
-        # 반환 목록에 ID 999 없음
-        mock_repo.get_evaluations_by_record.return_value = [
-            {**SAMPLE_EMPLOYEE_EVALUATION, "emp_eval_id": 1}
-        ]
+        mock_repo.get_evaluation_by_id.return_value = None
         resp = client.post("/api/employee-evaluations", json=self.PAYLOAD)
         assert resp.status_code == 500
 
