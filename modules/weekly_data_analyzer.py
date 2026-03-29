@@ -723,7 +723,7 @@ def analyze_weekly_trend(
 
     weekly_table = [
         {
-            "주간": "저번주",
+            "주간": "지난주",
             "출석일": attendance_prev,
             "식사량(일반식)": _format_total(last_meals["일반식"]),
             "식사량(죽식)": _format_total(last_meals["죽식"]),

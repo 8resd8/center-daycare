@@ -109,10 +109,10 @@ class ReportService:
         def _build_physical_change_observation(trend_meal: str, trend_toilet: str) -> str:
             for label, trend in (("식사", trend_meal), ("배설", trend_toilet)):
                 if trend in ("증가", "감소"):
-                    return f"저번주에 비해 이번주 {label} 상태가 {trend}하였음"
+                    return f"지난주에 비해 이번주 {label} 상태가 {trend}하였음"
             if trend_meal == "유지" and trend_toilet == "유지":
-                return "저번주에 비해 이번주 신체 상태가 전반적으로 유지되었음"
-            return "저번주에 비해 이번주 신체 상태의 변화 여부를 관찰하였음"
+                return "지난주에 비해 이번주 신체 상태가 전반적으로 유지되었음"
+            return "지난주에 비해 이번주 신체 상태의 변화 여부를 관찰하였음"
         
         payload = _safe_dict(payload)
         prev_week = _safe_dict(payload.get("previous_week"))

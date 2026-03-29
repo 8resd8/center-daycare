@@ -424,6 +424,13 @@ function WeeklyChangePanel({
   const progEntries = progTab === "curr" ? currProgEntries : prevProgEntries;
   const hasAnyProg = prevProgEntries.length > 0 || currProgEntries.length > 0;
 
+  const parseNum = (v: string | number | undefined): number | null => {
+    if (v === undefined || v === null || (v as string) === "-") return null;
+    const n = parseFloat(String(v).replace("회", ""));
+    return isNaN(n) ? null : n;
+  };
+  const prevRow = weeklyTable.length >= 2 ? weeklyTable[0] : null;
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div className="p-4 border-b border-gray-100 flex items-center gap-2">
@@ -461,11 +468,22 @@ function WeeklyChangePanel({
                           <span className="ml-1 font-normal text-gray-400 text-[11px]">({rangeLabel(i)})</span>
                         )}
                       </td>
-                      {TABLE_COLS.slice(1).map((c) => (
-                        <td key={c.key} className="border border-gray-200 px-2 py-1.5 whitespace-nowrap">
-                          {String(row[c.key] ?? "-")}
-                        </td>
-                      ))}
+                      {TABLE_COLS.slice(1).map((c) => {
+                        let colorClass = "";
+                        if (row.주간 === "이번주" && prevRow) {
+                          const prev = parseNum(prevRow[c.key]);
+                          const curr = parseNum(row[c.key]);
+                          if (prev !== null && curr !== null) {
+                            if (curr < prev) colorClass = "text-blue-600 font-semibold";
+                            else if (curr > prev) colorClass = "text-red-600 font-semibold";
+                          }
+                        }
+                        return (
+                          <td key={c.key} className={cn("border border-gray-200 px-2 py-1.5 whitespace-nowrap", colorClass)}>
+                            {String(row[c.key] ?? "-")}
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>

@@ -35,15 +35,15 @@ def _get_current_month_range():
 
 
 def _get_last_week_range():
-    """저번주 월요일 ~ 일요일 반환"""
+    """지난주 월요일 ~ 일요일 반환"""
     today = date.today()
     # 오늘의 요일 (0=월, 6=일)
     current_weekday = today.weekday()
     # 이번주 월요일
     this_monday = today - timedelta(days=current_weekday)
-    # 저번주 월요일
+    # 지난주 월요일
     last_monday = this_monday - timedelta(days=7)
-    # 저번주 일요일
+    # 지난주 일요일
     last_sunday = last_monday + timedelta(days=6)
     return last_monday, last_sunday
 
