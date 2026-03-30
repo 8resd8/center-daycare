@@ -425,10 +425,10 @@ class CareRecordParser:
                     else:
                         record["prog_enhance_detail"] = ""
 
-                if idx["note_phy"] != -1: record["physical_note"] = self._get_cell(table_data, idx["note_phy"], col_idx)
-                if idx["note_cog"] != -1: record["cognitive_note"] = self._get_cell(table_data, idx["note_cog"], col_idx)
-                if idx["note_nur"] != -1: record["nursing_note"] = self._get_cell(table_data, idx["note_nur"], col_idx)
-                if idx["note_func"] != -1: record["functional_note"] = self._get_cell(table_data, idx["note_func"], col_idx)
+                if idx["note_phy"] != -1:  record["physical_note"]   = self._get_cell(table_data, idx["note_phy"],  col_idx, smart_join=True)
+                if idx["note_cog"] != -1:  record["cognitive_note"]  = self._get_cell(table_data, idx["note_cog"],  col_idx, smart_join=True)
+                if idx["note_nur"] != -1:  record["nursing_note"]    = self._get_cell(table_data, idx["note_nur"],  col_idx, smart_join=True)
+                if idx["note_func"] != -1: record["functional_note"] = self._get_cell(table_data, idx["note_func"], col_idx, smart_join=True)
 
                 if idx["writer_phy"] != -1: record["writer_phy"] = self._get_cell(table_data, idx["writer_phy"], col_idx)
                 if idx["writer_cog"] != -1: record["writer_cog"] = self._get_cell(table_data, idx["writer_cog"], col_idx)
@@ -504,7 +504,7 @@ class CareRecordParser:
                     continue
 
                 # 내용 정제
-                clean_content = content.replace("\n", " ").strip()
+                clean_content = self._smart_join(content)
 
                 # 저장 구조: { '2025-11-05': { 'phy': '...', 'nur': '...' } }
                 if current_date not in self.appendix_notes:
@@ -810,9 +810,21 @@ class CareRecordParser:
             "vehicles": vehicles
         }
 
-    def _get_cell(self, table, row, col):
-        try: return str(table[row][col]).replace("\n", " ").strip() if table[row][col] else ""
-        except: return ""
+    def _smart_join(self, text: str) -> str:
+        """한글 음절 사이의 줄바꿈(열 너비 자동 줄바꿈)은 제거하고,
+        그 외 줄바꿈은 공백으로 변환하여 자연스러운 텍스트를 복원한다."""
+        text = re.sub(r'(?<=[\uAC00-\uD7A3])\n(?=[\uAC00-\uD7A3])', '', text)
+        return text.replace('\n', ' ').strip()
+
+    def _get_cell(self, table, row, col, smart_join=False):
+        try:
+            cell = table[row][col]
+            if not cell:
+                return ""
+            text = str(cell)
+            return self._smart_join(text) if smart_join else text.replace('\n', ' ').strip()
+        except:
+            return ""
 
     def _clean_date(self, date_str):
         try:

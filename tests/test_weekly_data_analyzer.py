@@ -492,7 +492,7 @@ class TestAnalyzeWeeklyTrend:
         assert 'this' in result['notes']
 
     def test_weekly_table_has_two_rows(self, sample_rows, date_ranges):
-        """weekly_table에 저번주/이번주 두 행이 포함된다"""
+        """weekly_table에 지난주/이번주 두 행이 포함된다"""
         prev_range, curr_range = date_ranges
 
         with patch('modules.weekly_data_analyzer.WeeklyStatusRepository') as MockRepo:
@@ -506,7 +506,7 @@ class TestAnalyzeWeeklyTrend:
 
         assert len(result['weekly_table']) == 2
         weeks = [row['주간'] for row in result['weekly_table']]
-        assert '저번주' in weeks
+        assert '지난주' in weeks
         assert '이번주' in weeks
 
     def test_attendance_counted_correctly(self, sample_rows, date_ranges):

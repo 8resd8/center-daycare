@@ -125,7 +125,7 @@ class TestGenerateWeeklyReport:
             mock_compute.return_value = {
                 "scores": {},
                 "trend": {
-                    "weekly_table": [{"주간": "저번주"}, {"주간": "이번주"}],
+                    "weekly_table": [{"주간": "지난주"}, {"주간": "이번주"}],
                     "ai_payload": {},
                 },
             }
@@ -232,7 +232,7 @@ class TestGetWeeklyAnalysis:
                 ),
                 "scores": {"physical": {"label": "신체활동", "prev": 55.0, "curr": 60.0}},
                 "trend": {
-                    "weekly_table": [{"주간": "저번주"}, {"주간": "이번주"}],
+                    "weekly_table": [{"주간": "지난주"}, {"주간": "이번주"}],
                     "prev_prog_entries": [],
                     "curr_prog_entries": [{"date": "01-08", "detail": "미니골프"}],
                 },

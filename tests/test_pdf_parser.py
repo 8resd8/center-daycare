@@ -687,11 +687,12 @@ class TestParseAppendixTable:
         assert "nur" in day_notes
 
     def test_newline_in_content_replaced(self):
+        # 한글 음절 사이 \n은 _smart_join으로 제거됨 (열 너비 자동 줄바꿈)
         table = [["2025.11.14", "첫줄\n둘째줄"]]
         self.parser._parse_appendix_table(table, "phy")
         content = self.parser.appendix_notes["2025-11-14"]["phy"]
         assert "\n" not in content
-        assert "첫줄 둘째줄" in content
+        assert "첫줄둘째줄" in content
 
 
 # ───────────────────────────────────────────────────────────────
@@ -1187,3 +1188,39 @@ class TestPickNearbyText:
         table = [["가", "나", "다라마바"]]
         result = self.parser._pick_nearby_text(table, 0, 0, min_len=2)
         assert result == "다라마바"
+
+
+# ───────────────────────────────────────────────────────────────
+# _smart_join / _get_cell(smart_join=True)
+# ───────────────────────────────────────────────────────────────
+
+class TestSmartJoin:
+    """
+    비즈니스 규칙: 한글 음절 사이 줄바꿈은 열 너비 자동 줄바꿈이므로 제거,
+    비한글 문자 사이 줄바꿈은 실제 구분자이므로 공백 유지.
+    """
+
+    def setup_method(self):
+        self.parser = make_parser()
+
+    def test_korean_linebreak_removed(self):
+        raw = '목욕도움드림.접시체조\n하실수있게자리이동도\n움드리고건강체조도와드\n림'
+        assert self.parser._smart_join(raw) == '목욕도움드림.접시체조하실수있게자리이동도움드리고건강체조도와드림'
+
+    def test_non_korean_linebreak_kept_as_space(self):
+        assert self.parser._smart_join('■\n73수5967') == '■ 73수5967'
+
+    def test_label_cell_fully_joined(self):
+        assert self.parser._smart_join('신\n체\n활\n동') == '신체활동'
+
+    def test_bracket_separator_kept(self):
+        raw = '[전담실]순환운동교실\n[전담실]접시체조'
+        assert self.parser._smart_join(raw) == '[전담실]순환운동교실 [전담실]접시체조'
+
+    def test_get_cell_smart_join_true(self):
+        table = [['목욕도움드림\n하실수있게']]
+        assert self.parser._get_cell(table, 0, 0, smart_join=True) == '목욕도움드림하실수있게'
+
+    def test_get_cell_smart_join_false_default(self):
+        table = [['목욕도움드림\n하실수있게']]
+        assert self.parser._get_cell(table, 0, 0) == '목욕도움드림 하실수있게'

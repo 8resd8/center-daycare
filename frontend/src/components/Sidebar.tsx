@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
@@ -10,17 +10,18 @@ import {
   Upload,
   FileText,
   Loader2,
-  Check,
   X,
   LogOut,
+  Pause,
+  Play,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useDocumentStore } from "@/store/documentStore";
 import { useFilterStore } from "@/store/filterStore";
 import { uploadApi } from "@/api/upload";
 import { dailyRecordsApi } from "@/api/dailyRecords";
 import { useAuthStore } from "@/store/authStore";
 import { authApi } from "@/api/auth";
+import { useChunkedUpload } from "@/hooks/useChunkedUpload";
 
 const navItems = [
   { to: "/", label: "기록지 처리", icon: FileText },
@@ -39,7 +40,6 @@ export default function Sidebar({ onClose }: SidebarProps) {
   const isRecordsPage = location.pathname === "/";
   const { user, clearAuth } = useAuthStore();
 
-  const { addDoc, markSaved, removeDoc, uploadedDocs } = useDocumentStore();
   const {
     startDate, endDate,
     setDateRange, setThisMonth, setLastMonth,
@@ -49,8 +49,11 @@ export default function Sidebar({ onClose }: SidebarProps) {
   const queryClient = useQueryClient();
   const [localStart, setLocalStart] = useState<string>(startDate ?? "");
   const [localEnd, setLocalEnd] = useState<string>(endDate ?? "");
-  const [uploading, setUploading] = useState(false);
-  const [savingId, setSavingId] = useState<string | null>(null);
+
+  // 현재 업로드 중인 파일 참조 (이어올리기용)
+  const currentFileRef = useRef<File | null>(null);
+
+  const { upload, pause, resume, progress, phase, reset } = useChunkedUpload();
 
   const handleLogout = async () => {
     try {
@@ -111,70 +114,100 @@ export default function Sidebar({ onClose }: SidebarProps) {
     setDateRange(localStart || null, localEnd || null);
   };
 
+  const runUpload = useCallback(
+    async (file: File) => {
+      currentFileRef.current = file;
+      try {
+        // 1. 청크 업로드 + 파싱
+        const result = await upload(file);
+
+        // 2. 자동 DB 저장
+        const saveRes = await uploadApi.save(result.file_id);
+
+        // 3. 업로드 기록의 날짜 범위 추출 → 필터 자동 적용
+        const dates = result.records
+          .map((r) => r.date as string)
+          .filter(Boolean)
+          .sort();
+        if (dates.length > 0) {
+          const minDate = dates[0];
+          const maxDate = dates[dates.length - 1];
+          setDateRange(minDate, maxDate);
+          setLocalStart(minDate);
+          setLocalEnd(maxDate);
+        }
+
+        toast.success(`${file.name} 저장 완료 (${saveRes.saved_count}건)`);
+
+        // 4. 수급자 목록 갱신 + 첫 번째 수급자 자동 선택
+        const { startDate: sd, endDate: ed, setSelectedCustomerId: setSel } =
+          useFilterStore.getState();
+        try {
+          const freshList = await queryClient.fetchQuery({
+            queryKey: ["customers-with-records", sd, ed],
+            queryFn: () =>
+              dailyRecordsApi.customersWithRecords({
+                start_date: sd ?? undefined,
+                end_date: ed ?? undefined,
+              }),
+            staleTime: 0,
+          });
+          const match = freshList.find((c) =>
+            result.customer_names.includes(c.name)
+          );
+          if (match) setSel(match.customer_id);
+        } catch {
+          await queryClient.invalidateQueries({
+            queryKey: ["customers-with-records"],
+          });
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error && err.message === "PAUSED") return;
+        toast.error(`${file.name} 업로드 실패`);
+        reset();
+      }
+    },
+    [upload, setDateRange, queryClient, reset]
+  );
+
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
-      let firstCustomerNames: string[] = [];
       for (const file of acceptedFiles) {
         if (!file.name.toLowerCase().endsWith(".pdf")) {
           toast.error(`${file.name}: PDF 파일만 업로드 가능합니다.`);
           continue;
         }
-        setUploading(true);
-        try {
-          const result = await uploadApi.upload(file);
-          await uploadApi.save(result.file_id);
-          addDoc(result);
-          removeDoc(result.file_id);
-          if (firstCustomerNames.length === 0) firstCustomerNames = result.customer_names;
-          toast.success(`${file.name} 저장 완료 (${result.total_records}건)`);
-        } catch {
-          toast.error(`${file.name} 업로드 실패`);
-        } finally {
-          setUploading(false);
-        }
-      }
-      // 업로드 완료 후 목록 갱신 + 첫 번째 수급자 자동 선택
-      if (firstCustomerNames.length > 0) {
-        const { startDate: sd, endDate: ed, setSelectedCustomerId: setSel } = useFilterStore.getState();
-        try {
-          const freshList = await queryClient.fetchQuery({
-            queryKey: ["customers-with-records", sd, ed],
-            queryFn: () => dailyRecordsApi.customersWithRecords({
-              start_date: sd ?? undefined,
-              end_date: ed ?? undefined,
-            }),
-            staleTime: 0,
-          });
-          const match = freshList.find((c) => firstCustomerNames.includes(c.name));
-          if (match) setSel(match.customer_id);
-        } catch {
-          await queryClient.invalidateQueries({ queryKey: ["customers-with-records"] });
-        }
+        await runUpload(file);
       }
     },
-    [addDoc, removeDoc, queryClient]
+    [runUpload]
   );
+
+  const handlePause = () => {
+    pause();
+  };
+
+  const handleResume = () => {
+    if (currentFileRef.current) {
+      resume(currentFileRef.current).catch((err: unknown) => {
+        if (err instanceof Error && err.message === "PAUSED") return;
+        toast.error("이어올리기 실패");
+        reset();
+      });
+    }
+  };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { "application/pdf": [".pdf"] },
     multiple: true,
+    disabled: phase === "uploading" || phase === "parsing",
   });
 
-  const handleSave = async (file_id: string) => {
-    setSavingId(file_id);
-    try {
-      const res = await uploadApi.save(file_id);
-      markSaved(file_id);
-      await queryClient.invalidateQueries({ queryKey: ["customers-with-records"] });
-      toast.success(res.message);
-      setTimeout(() => removeDoc(file_id), 1500);
-    } catch {
-      toast.error("DB 저장 실패");
-    } finally {
-      setSavingId(null);
-    }
-  };
+  const isUploading = phase === "uploading";
+  const isPaused = phase === "paused";
+  const isParsing = phase === "parsing";
+  const isActive = isUploading || isParsing;
 
   return (
     <aside className="w-[240px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
@@ -276,20 +309,29 @@ export default function Sidebar({ onClose }: SidebarProps) {
       {/* PDF 업로드 */}
       <div className="px-4 py-3 border-b border-gray-100">
         <p className="text-xs font-medium text-gray-500 mb-2">PDF 업로드</p>
+
+        {/* 드롭존 */}
         <div
           {...getRootProps()}
           className={cn(
             "border-2 border-dashed rounded-lg p-3 text-center cursor-pointer transition-colors text-xs",
-            isDragActive
+            isActive
+              ? "border-blue-300 bg-blue-50/50 cursor-not-allowed"
+              : isDragActive
               ? "border-blue-400 bg-blue-50 text-blue-600"
               : "border-gray-300 text-gray-400 hover:border-blue-300 hover:text-blue-500"
           )}
         >
           <input {...getInputProps()} />
-          {uploading ? (
-            <div className="flex items-center justify-center gap-1">
+          {isParsing ? (
+            <div className="flex items-center justify-center gap-1 text-blue-600">
               <Loader2 size={14} className="animate-spin" />
               파싱 중...
+            </div>
+          ) : isUploading ? (
+            <div className="flex items-center justify-center gap-1 text-blue-600">
+              <Loader2 size={14} className="animate-spin" />
+              업로드 중...
             </div>
           ) : isDragActive ? (
             <p>여기에 놓으세요</p>
@@ -300,39 +342,43 @@ export default function Sidebar({ onClose }: SidebarProps) {
             </div>
           )}
         </div>
+
+        {/* 진행률 바 (업로드 중) */}
+        {(isUploading || isPaused) && (
+          <div className="mt-2 space-y-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-500">
+                {isPaused ? "일시정지됨" : `업로드 중 ${progress}%`}
+              </span>
+              {isUploading ? (
+                <button
+                  onClick={handlePause}
+                  className="flex items-center gap-0.5 text-yellow-600 hover:text-yellow-700"
+                >
+                  <Pause size={11} /> 일시정지
+                </button>
+              ) : (
+                <button
+                  onClick={handleResume}
+                  className="flex items-center gap-0.5 text-blue-600 hover:text-blue-700"
+                >
+                  <Play size={11} /> 이어올리기
+                </button>
+              )}
+            </div>
+            <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className={cn(
+                  "h-full rounded-full transition-all duration-300",
+                  isPaused ? "bg-yellow-400" : "bg-blue-500"
+                )}
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* 업로드된 파일 목록 */}
-      {uploadedDocs.length > 0 && (
-        <div className="px-4 py-3">
-          <p className="text-xs font-medium text-gray-500 mb-2">업로드 파일</p>
-          <div className="space-y-2">
-            {uploadedDocs.map((doc) => (
-              <div key={doc.file_id} className="bg-gray-50 rounded p-2 text-xs">
-                <p className="font-medium text-gray-700 truncate">{doc.filename}</p>
-                <p className="text-gray-400">
-                  {doc.customer_names.slice(0, 3).join(", ")}
-                  {doc.customer_names.length > 3 && ` 외 ${doc.customer_names.length - 3}명`}
-                </p>
-                <p className="text-gray-400">{doc.total_records}건</p>
-                {doc.saved ? (
-                  <div className="flex items-center gap-1 mt-1 text-green-600">
-                    <Check size={12} /><span>저장 완료</span>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => handleSave(doc.file_id)}
-                    disabled={savingId === doc.file_id}
-                    className="mt-1 w-full text-xs bg-blue-600 text-white rounded py-1 hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    {savingId === doc.file_id ? <Loader2 size={12} className="animate-spin mx-auto" /> : "DB 저장"}
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
       {/* 로그아웃 */}
       <div className="px-4 py-3 border-t border-gray-100 mt-auto">
         <button
@@ -343,6 +389,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
           로그아웃
         </button>
       </div>
+
     </aside>
   );
 }
