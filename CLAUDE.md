@@ -1,110 +1,51 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Language
-
 모든 응답은 한국어로 작성하세요.
 
-## Project Overview
+## Project
+- 주간보호센터 내부 업무 관리 시스템
+- PDF 업로드 → 주간상태변화 기록지 자동 생성
+- 직원 평가 대시보드로 직원 관리
 
-보은사랑 기록 관리 시스템 — a Streamlit-based internal tool for long-term care (요양) facilities. It parses care record PDFs, stores daily records in MySQL, and uses AI (Google Gemini / OpenAI GPT) to evaluate and generate weekly status reports.
+## 기술 스택
+- 백엔드: FastAPI + Python 3.11
+- 프론트엔드: React 18 + Vite + TypeScript + Tailwind CSS
+- DB: MySQL (raw SQL, mysql.connector)
+- AI: Google Gemini (기본) / OpenAI (폴백)
+- 인증: JWT (httpOnly 쿠키, HS256)
+- 암호화: Fernet AES-128 (ENCRYPTION_KEY 환경변수)
 
-## Commands
+## 도메인 용어
+| 한국어 | 영문(코드) | 설명 |
+| 수급자 | Customer | 주간보호센터 이용자 |
+| 직원 | Employee / User | 시설 직원 (시스템 사용자) |
+| 기록지 | Daily Record | 일일 서비스 기록 |
+| 주간 보고서 | Weekly Report | 주간 상태변화 AI 생성 보고서 |
+| AI 평가 | AI Evaluation | 기록지 자동 평가 (우수/평균/개선) |
+| 직원 평가 | Employee Evaluation | 직원 작성 오류/누락 수동 평가 |
+| 지적 | Evaluation Point | 직원 평가의 오류/누락 1건 |
 
-### Run the app (development)
-```bash
-run app.py --server.enableCORS=false --server.enableXsrfProtection=false --browser.serverAddress=localhost --browser.serverPort=8501
-```
+직원 평가 카테고리: `공통` / `신체` / `인지` / `간호` / `기능`
+직원 평가 유형: `누락` / `내용부족` / `오타` / `문법` / `오류`
+AI 평가 등급: `우수(excellent)=3점` / `평균(average)=2점` / `개선(improvement)=1점`
 
-### Run tests
-```bash
-pytest                          # all tests
-pytest tests/repositories/      # repository tests only
-pytest tests/services/          # service tests only
-pytest -k test_name             # single test by name
-pytest --cov=modules            # with coverage
-```
+## 접근 권한 (RBAC)
+| 역할 | DB 값 | 권한 |
+| 관리자 | `ADMIN` | 모든 CRUD + PII 전체 조회 |
+| 직원 | `EMPLOYEE` | Only 읽기 + PII 마스킹 적용 |
 
-### Docker
-```bash
-# Development
-docker-compose up --build
+- ADMIN 전용 엔드포인트: `require_admin()` 의존성 사용
+- ADMIN 외 역할: 응답에서 PII 자동 마스킹 (`apply_customer_mask()` / `apply_employee_mask()`)
+- 감사 로깅: CREATE/UPDATE/DELETE 작업 → `audit_logs` 기록
 
-# Production
-docker-compose -f docker-compose.prod.yml up -d
-```
+## 개인정보(PII) 보호 규칙
+암호화 대상: `customers`(name, birth_date, recognition_no, facility_name, facility_code) / `users`(name, birth_date)
+- create/update 시 자동 Fernet 암호화, get/list 시 자동 복호화
+- 비밀번호: bcrypt(rounds=12) 해시 (암호화 아님)
+- 키워드 검색은 암호화로 SQL LIKE 불가 → Python 레이어 필터링
 
-### Install dependencies
-```bash
-pip install -r requirements.txt
-```
-
-## Architecture
-
-### Entry Point & Pages
-- `app.py` — main entry, sets up the Streamlit page with two tabs (주간 상태 변화 평가 / 일일 특이사항 평가) and a sidebar nav
-- `pages/customer_manage.py` — 수급자 CRUD
-- `pages/employee_manage.py` — 직원 CRUD
-- `pages/dashboard.py` — analytics dashboard using Altair charts; uses `@st.cache_data(ttl=300)` for data loading
-
-### Module Structure (`modules/`)
-
-```
-modules/
-├── ui/                    # Streamlit UI components
-│   ├── sidebar.py         # PDF upload, date filter, person list
-│   ├── tabs_weekly.py     # 주간 상태 변화 평가 tab
-│   ├── tabs_daily.py      # 일일 특이사항 평가 tab
-│   └── ui_helpers.py      # Shared session_state helpers
-├── repositories/          # Data access layer (extends BaseRepository)
-│   ├── base.py            # _execute_query / _execute_transaction helpers
-│   ├── customer.py
-│   ├── daily_info.py
-│   ├── weekly_status.py
-│   ├── ai_evaluation.py
-│   ├── employee_evaluation.py
-│   └── user.py
-├── services/              # Business logic layer
-│   ├── daily_report_service.py   # AI evaluation of daily notes
-│   ├── weekly_report_service.py  # AI weekly report generation
-│   └── analytics_service.py     # Wraps weekly_data_analyzer functions
-├── clients/               # External API wrappers
-│   ├── ai_client.py       # OpenAIClient / GeminiClient (BaseAIClient)
-│   ├── daily_prompt.py    # Prompt templates for daily evaluation
-│   └── weekly_prompt.py   # Prompt templates for weekly reports
-├── db_connection.py       # MySQL connection pool + db_query/db_transaction context managers
-├── database.py            # Thin facade over repositories (legacy compatibility)
-├── pdf_parser.py          # CareRecordParser — extracts structured data from PDF care records
-├── weekly_data_analyzer.py # Score/trend computation for weekly reports
-├── customers.py           # resolve_customer_id helper
-└── analytics.py           # Microsoft Clarity injection
-```
-
-### Database Connection Pattern
-- `db_connection.py` provides two context managers:
-  - `db_query()` — read-only, dictionary cursor, unbuffered
-  - `db_transaction()` — write operations, auto-commit/rollback
-- Config priority: env vars (`DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_PORT`) → Streamlit secrets (`[mysql]` section in `.streamlit/secrets.toml`)
-- Connection pooling via `mysql.connector.pooling.MySQLConnectionPool`
-
-### AI Client Pattern
-- `get_ai_client(provider='gemini')` returns a `BaseAIClient` instance
-- API key priority: env vars (`GEMINI_API_KEY` / `OPENAI_API_KEY`) → Streamlit secrets
-- In Streamlit runtime, clients are cached via `@st.cache_resource`
-- Rate limits handled by `tenacity` retry decorator (5 attempts, exponential backoff)
-
-### Testing Strategy
-Tests live in `tests/` mirroring `modules/` structure. All DB and AI calls are mocked:
-- `conftest.py` provides `MockCursor`, `MockConnection`, `MockAIClient` and pytest fixtures `mock_db`, `mock_db_query`, `mock_db_transaction`
-- To inject a mock DB: use `mock_db` fixture which patches both `db_query` and `db_transaction`
-- To inject a mock AI client: call `set_ai_client(mock_client)` from `modules.clients.ai_client`, clean up with `set_ai_client(None)` in teardown
-
-### Session State Conventions
-Key session state variables in `app.py`:
-- `st.session_state.docs` — list of document dicts (parsed PDFs or DB query results)
-- `st.session_state.active_doc_id` — currently selected document
-- `st.session_state.active_person_key` — `"{doc_id}::{person_name}"` format
-- `st.session_state.ai_suggestion_tables` — cached AI evaluation results
-
-Documents loaded from DB have `is_db_source: True` and `db_saved: True` flags.
+## Rules
+- DB: `db_query()` / `db_transaction()` 컨텍스트 매니저만 사용
+- 레이어: Repository → Service → UI 준수
+- 테스트: DB/AI는 항상 mock 사용 (픽스처: `tests/conftest.py`)
+- AI 호출: `modules/clients/ai_client.py` 통해서만 사용, 직접 SDK 호출 금지
+- **잘못된 방식이나 실수할 때마다 CLAUDE.md에 내용 추가**
