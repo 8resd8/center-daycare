@@ -10,7 +10,7 @@
 - 백엔드: FastAPI + Python 3.11
 - 프론트엔드: React 18 + Vite + TypeScript + Tailwind CSS
 - DB: MySQL (raw SQL, mysql.connector)
-- AI: Google Gemini (기본) / OpenAI (폴백)
+- AI: OpenAI
 - 인증: JWT (httpOnly 쿠키, HS256)
 - 암호화: Fernet AES-128 (ENCRYPTION_KEY 환경변수)
 
