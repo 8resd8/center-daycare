@@ -1,6 +1,11 @@
 ## Language
 모든 응답은 한국어로 작성하세요.
 
+## 참조 문서
+- [도메인 모델 / DB 스키마](docs/domain.md)
+- [아키텍처 / 레이어 / 보안 규칙](docs/architecture.md)
+- [API 엔드포인트 레퍼런스](docs/api.md)
+
 ## 빌드 및 실행
 ```bash
 uvicorn backend.main:app --reload        # 백엔드
