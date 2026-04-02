@@ -1,5 +1,5 @@
 // frontend/src/components/BulkEvalModal.tsx
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -125,14 +125,11 @@ interface BulkEvalModalProps {
 export default function BulkEvalModal({ open, onClose, records, users }: BulkEvalModalProps) {
   const [items, setItems] = useState<BulkEvalItem[]>([]);
   const [registering, setRegistering] = useState(false);
-  const initialized = useRef(false);
 
   // open될 때마다 누락 항목 재계산
   useEffect(() => {
     if (open) {
-      initialized.current = false;
       setItems(buildBulkItems(records, users));
-      initialized.current = true;
     }
   }, [open, records, users]);
 
@@ -184,7 +181,7 @@ export default function BulkEvalModal({ open, onClose, records, users }: BulkEva
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { if (!registering) onClose(); }}>
       <div
         className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
@@ -202,6 +199,7 @@ export default function BulkEvalModal({ open, onClose, records, users }: BulkEva
           <button
             onClick={onClose}
             disabled={registering}
+            aria-label="닫기"
             className="text-gray-400 hover:text-gray-600 disabled:opacity-40"
           >
             <X size={18} />
