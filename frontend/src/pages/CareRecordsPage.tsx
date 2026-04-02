@@ -175,6 +175,7 @@ export default function CareRecordsPage() {
         onClose={() => setShowBulkModal(false)}
         records={records}
         users={users}
+        showCustomerName={false}
       />
       {/* 수급자 정보 헤더 */}
       {selectedCustomer && (
