@@ -107,6 +107,7 @@ interface BulkEvalModalProps {
    - `evaluation_date`: 오늘 날짜
    - `target_date`: 해당 record의 date
    - `evaluation_type`: `"누락"`
+   - `evaluator_user_id`: `1` (기존 `EmployeeEvalForm`과 동일하게 하드코딩 유지)
    - `score`: `1`
    - `comment`: `"{fieldLabel} 누락"`
    - 백엔드가 동일 `record_id + target_user_id + category + evaluation_type` 조합은 자동 upsert 처리함
