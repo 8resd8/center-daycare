@@ -10,6 +10,7 @@ import { employeeEvaluationsApi } from "@/api/employeeEvaluations";
 import type { DailyRecord, WeeklyTableRow, ProgEntry } from "@/types";
 import { checkRecord, calcRate } from "@/lib/careRecordCheck";
 import type { CheckResult, CheckCategory } from "@/lib/careRecordCheck";
+import BulkEvalModal from "@/components/BulkEvalModal";
 
 type MainTab = "weekly" | "daily";
 type WeeklySubTab = "basic" | "physical" | "cognitive" | "nursing" | "recovery";
@@ -51,6 +52,7 @@ export default function CareRecordsPage() {
   const [copied, setCopied] = useState(false);
   const [bulkWeeklyGenerating, setBulkWeeklyGenerating] = useState(false);
   const [bulkWeeklyProgress, setBulkWeeklyProgress] = useState<{ current: number; total: number; name: string } | null>(null);
+  const [showBulkModal, setShowBulkModal] = useState(false);
 
   const { data: customersWithRecords = [] } = useQuery({
     queryKey: ["customers-with-records", startDate, endDate],
@@ -79,6 +81,11 @@ export default function CareRecordsPage() {
     enabled: !!selectedCustomerId && !!startDate && !!endDate,
   });
   const existingReportText = existingReports[0]?.report_text ?? null;
+
+  const { data: users = [] } = useQuery({
+    queryKey: ["employee-eval-users"],
+    queryFn: employeeEvaluationsApi.users,
+  });
 
   // 기존 보고서 로드 시 textarea에 반영
   useEffect(() => {
@@ -163,6 +170,12 @@ export default function CareRecordsPage() {
 
   return (
     <div className="space-y-4">
+      <BulkEvalModal
+        open={showBulkModal}
+        onClose={() => setShowBulkModal(false)}
+        records={records}
+        users={users}
+      />
       {/* 수급자 정보 헤더 */}
       {selectedCustomer && (
         <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
@@ -179,7 +192,7 @@ export default function CareRecordsPage() {
       )}
 
       {/* 메인 탭 */}
-      <div className="flex gap-2">
+      <div className="flex items-center gap-2">
         {[{ key: "weekly" as MainTab, label: "주간상태변화 평가" }, { key: "daily" as MainTab, label: "일일 특이사항 평가" }].map((t) => (
           <button key={t.key} onClick={() => setActiveTab(t.key)}
             className={cn("px-4 py-2 rounded-lg text-sm font-medium transition-colors",
@@ -188,6 +201,18 @@ export default function CareRecordsPage() {
             {t.label}
           </button>
         ))}
+        <button
+          onClick={() => setShowBulkModal(true)}
+          disabled={checkResults.every((r) =>
+            (["basic","physical","cognitive","nursing","recovery"] as const).every((cat) =>
+              Object.entries(r[cat] as Record<string, boolean | null | string>)
+                .every(([k, v]) => k === "writer" || v !== false)
+            )
+          )}
+          className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-sm font-medium hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          ⚠ 누락 일괄 확인
+        </button>
       </div>
 
       {loadingRecords ? (
