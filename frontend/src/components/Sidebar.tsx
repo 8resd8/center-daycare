@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
@@ -22,6 +22,10 @@ import { dailyRecordsApi } from "@/api/dailyRecords";
 import { useAuthStore } from "@/store/authStore";
 import { authApi } from "@/api/auth";
 import { useChunkedUpload } from "@/hooks/useChunkedUpload";
+import { useAllCustomerRecords } from "@/hooks/useAllCustomerRecords";
+import { useBulkEvalStore } from "@/store/bulkEvalStore";
+import BulkEvalModal, { buildBulkItems } from "@/components/BulkEvalModal";
+import { employeeEvaluationsApi } from "@/api/employeeEvaluations";
 
 const navItems = [
   { to: "/", label: "기록지 처리", icon: FileText },
@@ -55,15 +59,6 @@ export default function Sidebar({ onClose }: SidebarProps) {
 
   const { upload, pause, resume, progress, phase, reset } = useChunkedUpload();
 
-  const handleLogout = async () => {
-    try {
-      await authApi.logout();
-    } finally {
-      clearAuth();
-      navigate("/login", { replace: true });
-    }
-  };
-
   // 수급자 목록 (기록지 처리 페이지에서만 로드)
   const { data: customersWithRecords = [], isLoading: loadingCustomers } = useQuery({
     queryKey: ["customers-with-records", startDate, endDate],
@@ -74,6 +69,60 @@ export default function Sidebar({ onClose }: SidebarProps) {
       }),
     enabled: isRecordsPage,
   });
+
+  // users 쿼리 (BulkEvalModal과 동일한 캐시 키 공유)
+  const { data: users = [] } = useQuery({
+    queryKey: ["employee-eval-users"],
+    queryFn: employeeEvaluationsApi.users,
+    enabled: isRecordsPage,
+  });
+
+  // 전체 수급자 레코드 병렬 조회
+  const { allRecords, isLoading: loadingAllRecords } = useAllCustomerRecords(
+    isRecordsPage ? customersWithRecords : []
+  );
+
+  const { registeredItems, clear } = useBulkEvalStore();
+  const [showAllBulkModal, setShowAllBulkModal] = useState(false);
+
+  // 날짜 범위 변경 시 등록 상태 초기화
+  useEffect(() => {
+    clear();
+  }, [startDate, endDate, clear]);
+
+  // 수급자별 미등록 누락 항목 존재 여부
+  const customerMissingSet = useMemo(() => {
+    const set = new Set<number>();
+    for (const [customerId, records] of allRecords) {
+      const items = buildBulkItems(records, users);
+      if (items.some((item) => !registeredItems.has(item.id))) {
+        set.add(customerId);
+      }
+    }
+    return set;
+  }, [allRecords, users, registeredItems]);
+
+  const missingCount = customerMissingSet.size;
+
+  // 전체 수급자 모달용 customerMap, 전체 레코드 flat
+  const customerMap = useMemo(
+    () => new Map(customersWithRecords.map((c) => [c.customer_id, c.name])),
+    [customersWithRecords]
+  );
+
+  const allRecordsFlat = useMemo(
+    () => Array.from(allRecords.values()).flat(),
+    [allRecords]
+  );
+
+  const handleLogout = async () => {
+    try {
+      await authApi.logout();
+    } finally {
+      clearAuth();
+      navigate("/login", { replace: true });
+    }
+  };
 
   const handleThisMonth = () => {
     setThisMonth();
@@ -210,7 +259,18 @@ export default function Sidebar({ onClose }: SidebarProps) {
   const isActive = isUploading || isParsing;
 
   return (
-    <aside className="w-[240px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
+    <>
+      {isRecordsPage && (
+        <BulkEvalModal
+          open={showAllBulkModal}
+          onClose={() => setShowAllBulkModal(false)}
+          records={allRecordsFlat}
+          users={users}
+          customerMap={customerMap}
+          showCustomerName={true}
+        />
+      )}
+      <aside className="w-[240px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
       {/* 로고 */}
       <div className="px-4 py-5 border-b border-gray-100 flex items-start justify-between">
         <div>
@@ -267,6 +327,19 @@ export default function Sidebar({ onClose }: SidebarProps) {
         <button onClick={handleSearch} className="mt-2 w-full text-xs bg-blue-600 text-white rounded py-1.5 hover:bg-blue-700">
           조회
         </button>
+        {isRecordsPage && (
+          <button
+            onClick={() => setShowAllBulkModal(true)}
+            disabled={missingCount === 0 || loadingAllRecords}
+            className="mt-1.5 w-full flex items-center justify-center gap-1 text-xs py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed font-medium"
+          >
+            {loadingAllRecords ? (
+              <><Loader2 size={11} className="animate-spin" /> 누락 확인 중...</>
+            ) : (
+              `⚠ 전체 누락 일괄 등록${missingCount > 0 ? ` (${missingCount}명)` : ""}`
+            )}
+          </button>
+        )}
       </div>
 
       {/* 수급자 목록 (기록지 처리 페이지) */}
@@ -294,6 +367,8 @@ export default function Sidebar({ onClose }: SidebarProps) {
                     "w-full text-left px-2 py-1.5 rounded-lg text-xs transition-colors",
                     selectedCustomerId === c.customer_id
                       ? "bg-blue-50 text-blue-700 font-medium"
+                      : customerMissingSet.has(c.customer_id)
+                      ? "text-green-600 hover:bg-gray-100 font-medium"
                       : "text-gray-600 hover:bg-gray-100"
                   )}
                 >
@@ -391,5 +466,6 @@ export default function Sidebar({ onClose }: SidebarProps) {
       </div>
 
     </aside>
+    </>
   );
 }
