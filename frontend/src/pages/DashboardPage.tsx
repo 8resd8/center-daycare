@@ -538,6 +538,26 @@ function AiFeedbackPanel({ userId }: { userId: number }) {
         </div>
       ) : currentReport ? (
         <div className="space-y-4">
+          {/* ── 강점 + 총평 ── */}
+          {(currentReport.ai_result.strengths || currentReport.ai_result.overall_comment) && (
+            <div className="bg-green-50 rounded-xl border border-green-200 p-5 space-y-2">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-green-600 font-semibold text-sm">이달의 강점</span>
+              </div>
+              {currentReport.ai_result.strengths && (
+                <p className="text-sm text-green-800 leading-relaxed">
+                  {currentReport.ai_result.strengths}
+                </p>
+              )}
+              {currentReport.ai_result.overall_comment && (
+                <p className="text-xs text-green-600 mt-1">
+                  {currentReport.ai_result.overall_comment}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* ── 지적 사항 테이블 ── */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
               <h3 className="font-semibold text-gray-700">
@@ -571,35 +591,80 @@ function AiFeedbackPanel({ userId }: { userId: number }) {
             </table>
           </div>
 
+          {/* ── 우선 개선 행동 ── */}
+          {currentReport.ai_result.priority_actions &&
+            currentReport.ai_result.priority_actions.length > 0 && (
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div className="px-5 py-4 border-b border-gray-100">
+                  <h3 className="font-semibold text-gray-700">이번 달 우선 개선 행동</h3>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {currentReport.ai_result.priority_actions.map((action, i) => (
+                    <div key={i} className="px-5 py-4 flex gap-4 items-start">
+                      <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center">
+                        {action.순위}
+                      </span>
+                      <div className="space-y-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-800">{action.개선_항목}</p>
+                        <p className="text-xs text-gray-600">
+                          <span className="font-medium text-gray-500">실천 방법: </span>
+                          {action.실천_방법}
+                        </p>
+                        <p className="text-xs text-blue-700 bg-blue-50 rounded px-2 py-1">
+                          💙 {action.기대_효과}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+          {/* ── 작성 방식 개선 예시 ── */}
           {currentReport.ai_result.improvement_examples.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="px-5 py-4 border-b border-gray-100">
                 <h3 className="font-semibold text-gray-700">작성 방식 개선 예시</h3>
               </div>
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 w-1/2">
-                      기존 작성방식
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 w-1/2">
-                      개선 작성방식
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {currentReport.ai_result.improvement_examples.map((ex, i) => (
-                    <tr key={i} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-xs text-gray-500">{ex.기존_작성방식}</td>
-                      <td className="px-4 py-3 text-xs text-gray-700 font-medium">
-                        {ex.개선_작성방식}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="divide-y divide-gray-100">
+                {currentReport.ai_result.improvement_examples.map((ex, i) => (
+                  <div key={i} className="px-5 py-4 space-y-2">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-red-50 rounded-lg px-3 py-2">
+                        <p className="text-xs text-red-500 font-medium mb-1">기존</p>
+                        <p className="text-xs text-gray-600">{ex.기존_작성방식}</p>
+                      </div>
+                      <div className="bg-green-50 rounded-lg px-3 py-2">
+                        <p className="text-xs text-green-600 font-medium mb-1">개선</p>
+                        <p className="text-xs text-gray-800 font-medium">{ex.개선_작성방식}</p>
+                      </div>
+                    </div>
+                    {ex.개선_포인트 && (
+                      <p className="text-xs text-gray-500 italic pl-1">
+                        ✦ {ex.개선_포인트}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
+
+          {/* ── 자기점검 체크리스트 ── */}
+          {currentReport.ai_result.self_checklist &&
+            currentReport.ai_result.self_checklist.length > 0 && (
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <h3 className="font-semibold text-gray-700 mb-3">기록 제출 전 자기점검</h3>
+                <ul className="space-y-2">
+                  {currentReport.ai_result.self_checklist.map((item, i) => (
+                    <li key={i} className="flex items-start gap-2 text-xs text-gray-700">
+                      <span className="flex-shrink-0 w-4 h-4 rounded border border-gray-300 mt-0.5" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400 text-sm">
