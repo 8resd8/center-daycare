@@ -287,11 +287,25 @@ export interface FeedbackReportSummaryRow {
 export interface FeedbackReportImprovementExample {
   기존_작성방식: string;
   개선_작성방식: string;
+  개선_포인트?: string; // v2 신규 (구 버전 하위 호환)
+}
+
+export interface FeedbackReportPriorityAction {
+  순위: number;
+  개선_항목: string;
+  실천_방법: string;
+  기대_효과: string;
 }
 
 export interface FeedbackReportAiResult {
+  // v1 필드 (하위 호환)
   summary_table: FeedbackReportSummaryRow[];
   improvement_examples: FeedbackReportImprovementExample[];
+  // v2 신규 필드 (optional — 구 리포트에는 없을 수 있음)
+  overall_comment?: string;
+  strengths?: string;
+  priority_actions?: FeedbackReportPriorityAction[];
+  self_checklist?: string[];
 }
 
 export interface FeedbackReport {
