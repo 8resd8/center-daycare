@@ -2,6 +2,12 @@
 
 from typing import Optional, List, Dict
 
+
+def _xe(s: str) -> str:
+    """XML 특수문자 이스케이프."""
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 FEEDBACK_SYSTEM_PROMPT = """<role>
   당신은 요양보호사 케어 기록 작성 전문 코치입니다.
   직원의 월별 지적 이력을 분석하여 구체적이고 실용적인 피드백 리포트를 작성합니다.
@@ -34,15 +40,15 @@ def build_user_prompt(
     """동적 user 프롬프트 빌드."""
     note_block = ""
     if admin_note:
-        note_block = f"\n<admin_note>\n  {admin_note}\n</admin_note>"
+        note_block = f"\n<admin_note>\n  {_xe(admin_note)}\n</admin_note>"
 
     records_xml = ""
     for ev in evaluations:
-        eval_date = ev.get("evaluation_date", "")
-        target_date = ev.get("target_date", "")
-        category = ev.get("category", "")
-        eval_type = ev.get("evaluation_type", "")
-        comment = ev.get("comment", "") or ""
+        eval_date = str(ev.get("evaluation_date", ""))
+        target_date = str(ev.get("target_date", ""))
+        category = _xe(str(ev.get("category", "")))
+        eval_type = _xe(str(ev.get("evaluation_type", "")))
+        comment = _xe(str(ev.get("comment", "") or ""))
         records_xml += (
             f"\n  <record>"
             f"\n    <evaluation_date>{eval_date}</evaluation_date>"

@@ -35,10 +35,15 @@ def create_feedback_report(
     enc = EncryptionService()
     employee_name = enc.safe_decrypt(user["name"])
 
-    year, month = body.target_month.split("-")
-    first_day = f"{year}-{month}-01"
-    last_day_num = calendar.monthrange(int(year), int(month))[1]
-    last_day = f"{year}-{month}-{last_day_num:02d}"
+    try:
+        year, month = body.target_month.split("-")
+        first_day = f"{year}-{month}-01"
+        last_day_num = calendar.monthrange(int(year), int(month))[1]
+        last_day = f"{year}-{month}-{last_day_num:02d}"
+    except (ValueError, IndexError):
+        raise HTTPException(
+            status_code=422, detail="target_month는 'YYYY-MM' 형식이어야 합니다."
+        )
 
     with db_query() as cursor:
         cursor.execute(

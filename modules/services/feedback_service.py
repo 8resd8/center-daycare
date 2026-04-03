@@ -79,7 +79,3 @@ class FeedbackService:
             피드백 레포트 딕셔너리 또는 None
         """
         return self.repo.get_by_month(user_id, target_month)
-
-
-# 서비스 인스턴스 생성
-feedback_service = FeedbackService(FeedbackReportRepository())
