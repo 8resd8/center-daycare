@@ -298,9 +298,9 @@ export interface FeedbackReportPriorityAction {
 }
 
 export interface FeedbackReportAiResult {
-  // v1 필드 (하위 호환)
-  summary_table: FeedbackReportSummaryRow[];
-  improvement_examples: FeedbackReportImprovementExample[];
+  // v1 필드 (하위 호환 — AI 응답 누락 가능성으로 optional 처리)
+  summary_table?: FeedbackReportSummaryRow[];
+  improvement_examples?: FeedbackReportImprovementExample[];
   // v2 신규 필드 (optional — 구 리포트에는 없을 수 있음)
   overall_comment?: string;
   strengths?: string;
