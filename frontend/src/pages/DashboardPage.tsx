@@ -578,7 +578,7 @@ function AiFeedbackPanel({ userId }: { userId: number }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {currentReport.ai_result.summary_table.map((row, i) => (
+                {(currentReport.ai_result.summary_table ?? []).map((row, i) => (
                   <tr key={i} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-xs font-medium text-gray-700 whitespace-nowrap">
                       {row.구분}
@@ -627,7 +627,7 @@ function AiFeedbackPanel({ userId }: { userId: number }) {
                 <h3 className="font-semibold text-gray-700">작성 방식 개선 예시</h3>
               </div>
               <div className="divide-y divide-gray-100">
-                {currentReport.ai_result.improvement_examples.map((ex, i) => (
+                {(currentReport.ai_result.improvement_examples ?? []).map((ex, i) => (
                   <div key={i} className="px-5 py-4 space-y-2">
                     <div className="grid grid-cols-2 gap-3">
                       <div className="bg-red-50 rounded-lg px-3 py-2">
