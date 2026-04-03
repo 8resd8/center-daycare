@@ -1,7 +1,6 @@
 """FastAPI 메인 앱"""
 
 import sys
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -11,12 +10,12 @@ sys.path.insert(0, str(ROOT_DIR))
 
 # .env 파일 로드 (Streamlit secrets 없이 환경변수로 운영 시)
 from dotenv import load_dotenv
+
 load_dotenv(ROOT_DIR / ".env")
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -31,6 +30,7 @@ from backend.routers import (
     upload,
     dashboard,
     auth,
+    feedback_reports,
 )
 
 
@@ -42,6 +42,7 @@ async def lifespan(app: FastAPI):
     # DB 연결 풀 초기화 (첫 쿼리 시 자동 초기화됨)
     try:
         from modules.db_connection import _get_connection_pool
+
         _get_connection_pool()
         print("DB 연결 풀 초기화 완료")
     except Exception as e:
@@ -87,6 +88,7 @@ app.include_router(ai_evaluations.router, prefix="/api", tags=["AI 평가"])
 app.include_router(employee_evaluations.router, prefix="/api", tags=["직원 평가"])
 app.include_router(upload.router, prefix="/api", tags=["파일 업로드"])
 app.include_router(dashboard.router, prefix="/api", tags=["대시보드"])
+app.include_router(feedback_reports.router, prefix="/api", tags=["피드백 리포트"])
 
 
 @app.get("/api/health")

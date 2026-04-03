@@ -9,6 +9,7 @@ from jose import jwt
 
 # ─── 앱 / TestClient ────────────────────────────────────────────────────
 
+
 @pytest.fixture(scope="session")
 def app():
     """FastAPI 앱 인스턴스 (DB 연결 풀 초기화 없이)."""
@@ -20,6 +21,7 @@ def app():
 
     with patch("modules.db_connection._get_connection_pool", return_value=MagicMock()):
         from backend.main import app as _app
+
         yield _app
 
 
@@ -107,6 +109,7 @@ def auth_cookies():
 
 
 # ─── 공통 Mock Repo 팩토리 ──────────────────────────────────────────────
+
 
 def make_mock_customer_repo():
     repo = MagicMock()
@@ -224,3 +227,48 @@ SAMPLE_DAILY_RECORD = {
     "functional_note": "기능 특이사항",
     "writer_recovery": "박재활",
 }
+
+# ── 피드백 리포트 ────────────────────────────────────────────────────────
+
+SAMPLE_FEEDBACK_REPORT = {
+    "report_id": 1,
+    "user_id": 1,
+    "target_month": "2026-01",
+    "admin_note": None,
+    "ai_result": {
+        "summary_table": [
+            {"구분": "오류", "상세내용": "이동 도움 기재 오류 2회", "비고": "총 2건"},
+            {"구분": "누락", "상세내용": "인지 특이사항 미작성 5회", "비고": "총 5건"},
+            {"구분": "횟수부족", "상세내용": "내용 단순 기재 3회", "비고": "총 3건"},
+            {"구분": "좋았던 부분", "상세내용": "신체활동 꾸준히 작성", "비고": ""},
+            {
+                "구분": "개선해야 하는 부분",
+                "상세내용": "어르신 반응 없이 행위만 기재",
+                "비고": "",
+            },
+            {
+                "구분": "개선방법",
+                "상세내용": "프로그램명+반응+도움 순으로 작성",
+                "비고": "",
+            },
+        ],
+        "improvement_examples": [
+            {
+                "기존_작성방식": "인지 프로그램 도움 드림",
+                "개선_작성방식": "퍼즐 맞추기 실시, 3개 완성하심",
+            },
+        ],
+    },
+    "created_at": "2026-01-31T10:00:00",
+    "updated_at": "2026-01-31T10:00:00",
+}
+
+
+def make_mock_feedback_service():
+    svc = MagicMock()
+    svc.generate_and_save.return_value = SAMPLE_FEEDBACK_REPORT
+    svc.list_months.return_value = [
+        {"report_id": 1, "target_month": "2026-01", "created_at": "2026-01-31T10:00:00"}
+    ]
+    svc.get_by_month.return_value = SAMPLE_FEEDBACK_REPORT
+    return svc
