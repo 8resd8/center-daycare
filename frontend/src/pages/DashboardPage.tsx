@@ -541,7 +541,7 @@ function AiFeedbackPanel({ userId }: { userId: number }) {
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
               <h3 className="font-semibold text-gray-700">
-                {currentReport.target_month} — 피드백 요약
+                {currentReport.target_month} 피드백
               </h3>
               {currentReport.admin_note && (
                 <p className="text-xs text-gray-400 mt-1">메모: {currentReport.admin_note}</p>
