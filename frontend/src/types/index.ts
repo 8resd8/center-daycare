@@ -269,3 +269,37 @@ export interface DateRange {
   start: string | null;
   end: string | null;
 }
+
+// ── 직원 피드백 리포트 ───────────────────────────────────────────────────
+
+export interface FeedbackReportMonthItem {
+  report_id: number;
+  target_month: string;
+  created_at: string;
+}
+
+export interface FeedbackReportSummaryRow {
+  구분: string;
+  상세내용: string;
+  비고: string;
+}
+
+export interface FeedbackReportImprovementExample {
+  기존_작성방식: string;
+  개선_작성방식: string;
+}
+
+export interface FeedbackReportAiResult {
+  summary_table: FeedbackReportSummaryRow[];
+  improvement_examples: FeedbackReportImprovementExample[];
+}
+
+export interface FeedbackReport {
+  report_id: number;
+  user_id: number;
+  target_month: string;
+  admin_note: string | null;
+  ai_result: FeedbackReportAiResult;
+  created_at: string;
+  updated_at: string;
+}
