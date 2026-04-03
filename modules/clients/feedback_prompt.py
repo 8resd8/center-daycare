@@ -62,14 +62,15 @@ def build_user_prompt(
     evaluations: List[Dict],
 ) -> str:
     """동적 user 프롬프트 빌드."""
+    evaluations = evaluations or []
     note_block = ""
     if admin_note:
         note_block = f"\n<admin_note>\n  {_xe(admin_note)}\n</admin_note>"
 
     records_xml = ""
     for ev in evaluations:
-        eval_date = str(ev.get("evaluation_date", ""))
-        target_date = str(ev.get("target_date", ""))
+        eval_date = _xe(str(ev.get("evaluation_date", "")))
+        target_date = _xe(str(ev.get("target_date", "")))
         category = _xe(str(ev.get("category", "")))
         eval_type = _xe(str(ev.get("evaluation_type", "")))
         comment = _xe(str(ev.get("comment", "") or ""))
@@ -84,7 +85,7 @@ def build_user_prompt(
         )
 
     return (
-        f"<target>\n  <name>{employee_name}</name>\n  <month>{target_month}</month>\n</target>"
+        f"<target>\n  <name>{_xe(employee_name)}</name>\n  <month>{_xe(target_month)}</month>\n</target>"
         f"{note_block}"
         f'\n<evaluation_history count="{len(evaluations)}">'
         f"{records_xml}"
