@@ -47,4 +47,6 @@ cd frontend && npm run build             # 타입 체크 (tsc -b 포함)
 - bcrypt 버전 충돌: passlib는 bcrypt≥5.0 호환 안 됨 — `bcrypt<5.0` pin 필수
 - Rate limit 테스트 간섭: slowapi storage를 autouse fixture로 reset 안 하면 테스트 순서에 따라 실패
 - 키워드 테스트 SQL 검사 제거: `find_by_name`, `list_customers` 등에서 SQL LIKE 파라미터 assert 금지 (Python 필터링으로 변경됨)
+- DATE_FORMAT 내 `%s`(초) 충돌: mysql.connector는 `%s` 전부를 파라미터로 인식 — `%%s` 이스케이프해도 뒤 `%s`가 매치됨. **반드시 `%%S` 사용** (MySQL `%S` = seconds, 동일 의미)
+- DATE_FORMAT 회귀 테스트의 `RE_MYSQL_PARAM`: lookbehind `(?<![%])%s` 쓰면 안 됨 — 실제 connector는 `re.compile(b"(%s)")` 그대로이므로 테스트도 `re.compile(r"%s")` 사용
 - **잘못된 방식이나 실수할 때마다 이 섹션에 추가**

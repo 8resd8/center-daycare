@@ -36,8 +36,8 @@ class FeedbackReportRepository(BaseRepository):
         """특정 월 리포트 반환. ai_result는 dict로 변환."""
         row = self._execute_query_one(
             "SELECT report_id, user_id, target_month, admin_note, ai_result, "
-            "DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s') AS created_at, "
-            "DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s') AS updated_at "
+            "DATE_FORMAT(created_at, '%%Y-%%m-%%dT%%H:%%i:%%S') AS created_at, "
+            "DATE_FORMAT(updated_at, '%%Y-%%m-%%dT%%H:%%i:%%S') AS updated_at "
             "FROM employee_feedback_reports "
             "WHERE user_id = %s AND target_month = %s",
             (user_id, target_month),
@@ -53,7 +53,7 @@ class FeedbackReportRepository(BaseRepository):
         """저장된 월 목록 (최신순)."""
         rows = self._execute_query(
             "SELECT report_id, target_month, "
-            "DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s') AS created_at "
+            "DATE_FORMAT(created_at, '%%Y-%%m-%%dT%%H:%%i:%%S') AS created_at "
             "FROM employee_feedback_reports "
             "WHERE user_id = %s "
             "ORDER BY target_month DESC",

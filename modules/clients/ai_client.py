@@ -198,7 +198,7 @@ def _is_streamlit_runtime() -> bool:
         return False
 
 
-def get_ai_client(provider: str = 'gemini') -> BaseAIClient:
+def get_ai_client(provider: str = 'openai') -> BaseAIClient:
     """AI 클라이언트 인스턴스 반환
 
     Args:

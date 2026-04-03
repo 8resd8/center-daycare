@@ -45,7 +45,7 @@ class FeedbackService:
             {"role": "user", "content": user_prompt},
         ]
         response = get_ai_client().chat_completion(
-            model="gemini-2.5-flash-preview-04-17",
+            model="gpt-4o-mini",
             messages=messages,
         )
         content = response.choices[0].message.content
