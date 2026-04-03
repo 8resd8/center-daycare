@@ -17,6 +17,13 @@ pytest -k test_name                      # 단일 테스트
 cd frontend && npm run build             # 타입 체크 (tsc -b 포함)
 ```
 
+## 금지 명령어
+아래 명령어는 절대 실행하지 마세요 (settings.json deny로도 차단됨):
+- `rm`, `rm -rf` — 파일/디렉토리 삭제
+- `git reset` — 커밋/스테이징 되돌리기
+- `git push --force`, `git push -f` — 강제 푸시
+- `git clean` — 추적되지 않는 파일 삭제
+
 ## 아키텍처 규칙
 - 레이어 순서: Router → Service → Repository (건너뜀 금지)
 - DB: `db_query()` / `db_transaction()`만 사용 (raw connection 금지)

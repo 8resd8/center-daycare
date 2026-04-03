@@ -96,8 +96,7 @@ class FeedbackReportCreate(BaseModel):
 5. `get_ai_client().chat_completion()` 호출
 6. AI 응답 JSON 파싱 및 유효성 검사
 7. `employee_feedback_reports` upsert (`ON DUPLICATE KEY UPDATE`)
-8. `audit_logs` 기록 (action: `CREATE` or `UPDATE`)
-9. 저장된 결과 반환
+8. 저장된 결과 반환
 
 ---
 
@@ -226,11 +225,3 @@ frontend/src/
   - GET 단건: 결과 조회, 없는 월 404
   - AI 응답 파싱 오류 시 500 처리
 
----
-
-## 7. 감사 로그
-
-생성/재생성 시 `audit_logs` 기록:
-- `action`: `CREATE` (신규) / `UPDATE` (재생성)
-- `table_name`: `employee_feedback_reports`
-- `record_id`: `report_id`
