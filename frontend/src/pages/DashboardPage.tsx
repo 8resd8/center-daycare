@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   LineChart,
@@ -19,7 +19,8 @@ import { cn } from "@/lib/utils";
 import { useFilterStore } from "@/store/filterStore";
 import { dashboardApi } from "@/api/dashboard";
 import { employeeEvaluationsApi } from "@/api/employeeEvaluations";
-import type { EmpEvalRankingItem } from "@/types";
+import { feedbackReportsApi } from "@/api/feedbackReports";
+import type { EmpEvalRankingItem, FeedbackReport, FeedbackReportMonthItem } from "@/types";
 
 type DashTab = "stats" | "rankings" | "details";
 
@@ -409,6 +410,206 @@ export default function DashboardPage() {
   );
 }
 
+// ── AI 피드백 패널 ───────────────────────────────────────────────
+function AiFeedbackPanel({ userId }: { userId: number }) {
+  const today = new Date();
+  const defaultMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+
+  const [targetMonth, setTargetMonth] = useState(defaultMonth);
+  const [adminNote, setAdminNote] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [savedMonths, setSavedMonths] = useState<FeedbackReportMonthItem[]>([]);
+  const [currentReport, setCurrentReport] = useState<FeedbackReport | null>(null);
+  const [loadingMonths, setLoadingMonths] = useState(false);
+  const [loadingReport, setLoadingReport] = useState(false);
+
+  useEffect(() => {
+    setCurrentReport(null);
+    setSavedMonths([]);
+    setLoadingMonths(true);
+    feedbackReportsApi
+      .listMonths(userId)
+      .then(setSavedMonths)
+      .catch(() => {})
+      .finally(() => setLoadingMonths(false));
+  }, [userId]);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      const report = await feedbackReportsApi.generate(userId, targetMonth, adminNote || null);
+      setCurrentReport(report);
+      const months = await feedbackReportsApi.listMonths(userId);
+      setSavedMonths(months);
+      toast.success("AI 피드백이 생성되었습니다.");
+    } catch {
+      toast.error("피드백 생성 실패");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleLoadMonth = async (month: string) => {
+    setLoadingReport(true);
+    try {
+      const report = await feedbackReportsApi.getByMonth(userId, month);
+      setCurrentReport(report);
+    } catch {
+      toast.error("피드백 로드 실패");
+    } finally {
+      setLoadingReport(false);
+    }
+  };
+
+  const monthOptions: string[] = [];
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    monthOptions.push(
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h3 className="font-semibold text-gray-700 mb-3">AI 피드백 생성</h3>
+        <div className="flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">대상 월</label>
+            <select
+              value={targetMonth}
+              onChange={(e) => setTargetMonth(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
+            >
+              {monthOptions.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex-1 min-w-[200px]">
+            <label className="text-xs text-gray-500 block mb-1">관리자 메모 (선택)</label>
+            <input
+              type="text"
+              value={adminNote}
+              onChange={(e) => setAdminNote(e.target.value)}
+              placeholder="AI 참고용 메모 입력"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+          <button
+            onClick={handleGenerate}
+            disabled={generating}
+            className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+          >
+            {generating && <Loader2 size={14} className="animate-spin" />}
+            AI 피드백 생성
+          </button>
+        </div>
+      </div>
+
+      {loadingMonths ? (
+        <div className="flex justify-center py-4">
+          <Loader2 size={20} className="animate-spin text-gray-400" />
+        </div>
+      ) : savedMonths.length > 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <p className="text-xs text-gray-500 mb-2">저장된 월</p>
+          <div className="flex flex-wrap gap-2">
+            {savedMonths.map((item) => (
+              <button
+                key={item.target_month}
+                onClick={() => handleLoadMonth(item.target_month)}
+                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                  currentReport?.target_month === item.target_month
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : "bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100"
+                }`}
+              >
+                {item.target_month}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {loadingReport ? (
+        <div className="flex justify-center py-8">
+          <Loader2 size={24} className="animate-spin text-gray-400" />
+        </div>
+      ) : currentReport ? (
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h3 className="font-semibold text-gray-700">
+                {currentReport.target_month} — 피드백 요약
+              </h3>
+              {currentReport.admin_note && (
+                <p className="text-xs text-gray-400 mt-1">메모: {currentReport.admin_note}</p>
+              )}
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  {["구분", "상세내용", "비고"].map((h) => (
+                    <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {currentReport.ai_result.summary_table.map((row, i) => (
+                  <tr key={i} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-xs font-medium text-gray-700 whitespace-nowrap">
+                      {row.구분}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-600">{row.상세내용}</td>
+                    <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">{row.비고}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {currentReport.ai_result.improvement_examples.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100">
+                <h3 className="font-semibold text-gray-700">작성 방식 개선 예시</h3>
+              </div>
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 w-1/2">
+                      기존 작성방식
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 w-1/2">
+                      개선 작성방식
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {currentReport.ai_result.improvement_examples.map((ex, i) => (
+                    <tr key={i} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-xs text-gray-500">{ex.기존_작성방식}</td>
+                      <td className="px-4 py-3 text-xs text-gray-700 font-medium">
+                        {ex.개선_작성방식}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400 text-sm">
+          대상 월을 선택하고 AI 피드백을 생성하거나, 저장된 월을 클릭하세요.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── 개별 리포트 탭 ───────────────────────────────────────────────
 interface DetailsTabProps {
   empEvalRankings: EmpEvalRankingItem[];
@@ -427,6 +628,7 @@ function DetailsTab({
   startDate, endDate, empEvalHistory, loadingHistory, monthlyTrend, queryClient,
 }: DetailsTabProps) {
   const today = new Date().toISOString().slice(0, 10);
+  const [subTab, setSubTab] = useState<"history" | "feedback">("history");
   const [showForm, setShowForm] = useState(false);
   const [targetDate, setTargetDate] = useState(today);
   const [category, setCategory] = useState("신체");
@@ -545,252 +747,288 @@ function DetailsTab({
         </select>
       </div>
 
-      {!selectedEmployee ? (
+      {/* 서브탭 */}
+      <div className="flex gap-1 mb-4 border-b border-gray-200">
+        <button
+          onClick={() => setSubTab("history")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            subTab === "history"
+              ? "border-blue-500 text-blue-600"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          평가 이력
+        </button>
+        <button
+          onClick={() => setSubTab("feedback")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            subTab === "feedback"
+              ? "border-blue-500 text-blue-600"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          AI 피드백
+        </button>
+      </div>
+
+      {subTab === "history" && (
+        <>
+          {!selectedEmployee ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400">
+              직원을 선택하세요.
+            </div>
+          ) : loadingHistory ? (
+            <div className="flex justify-center py-8">
+              <Loader2 size={24} className="animate-spin text-gray-400" />
+            </div>
+          ) : empEvalHistory ? (
+            <div className="space-y-4">
+              {/* 프로필 요약 KPI */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
+                  <p className="text-xs text-gray-500 mb-1">총 지적 횟수</p>
+                  <p className="text-2xl font-bold text-gray-800">{empEvalHistory.records.length}건</p>
+                </div>
+                <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
+                  <p className="text-xs text-gray-500 mb-1">주요 지적 유형</p>
+                  <p className="text-lg font-bold text-gray-800">
+                    {(() => {
+                      const counts: Record<string, number> = {};
+                      empEvalHistory.records.forEach((r) => {
+                        counts[r.evaluation_type] = (counts[r.evaluation_type] ?? 0) + 1;
+                      });
+                      const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+                      return top ? top[0] : "-";
+                    })()}
+                  </p>
+                </div>
+                <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
+                  <p className="text-xs text-gray-500 mb-1">취약 카테고리</p>
+                  <p className="text-lg font-bold text-gray-800">
+                    {(() => {
+                      const counts: Record<string, number> = {};
+                      empEvalHistory.records.forEach((r) => {
+                        counts[r.category] = (counts[r.category] ?? 0) + 1;
+                      });
+                      const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+                      return top ? top[0] : "-";
+                    })()}
+                  </p>
+                </div>
+              </div>
+
+              {/* 월별 지적 건수 추이 미니차트 */}
+              {monthlyTrend.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <h3 className="font-semibold text-gray-700 mb-3">월별 지적 건수 추이</h3>
+                  <ResponsiveContainer width="100%" height={160}>
+                    <BarChart data={monthlyTrend}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                      <Tooltip />
+                      <Bar dataKey="count" name="건수" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {/* 평가 추가 폼 */}
+              {!showForm ? (
+                <button
+                  onClick={() => { setShowForm(true); setTargetDate(today); }}
+                  className="flex items-center gap-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700"
+                >
+                  <Plus size={14} /> 평가 추가
+                </button>
+              ) : (
+                <div className="bg-white rounded-xl border border-blue-200 p-4">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                    {empEvalHistory.name} — 평가 추가
+                  </h3>
+                  <div className="grid grid-cols-4 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">해당 날짜</label>
+                      <input
+                        type="date"
+                        value={targetDate}
+                        onChange={(e) => setTargetDate(e.target.value)}
+                        className="w-full text-xs border border-gray-200 rounded px-2 py-1.5"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">카테고리</label>
+                      <select value={category} onChange={(e) => setCategory(e.target.value)}
+                        className="w-full text-xs border border-gray-200 rounded px-2 py-1.5">
+                        {CATEGORY_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">평가 유형</label>
+                      <select value={evalType} onChange={(e) => setEvalType(e.target.value)}
+                        className="w-full text-xs border border-gray-200 rounded px-2 py-1.5">
+                        {EVAL_TYPE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">코멘트 (선택)</label>
+                      <input
+                        type="text"
+                        value={comment}
+                        onChange={(e) => setComment(e.target.value)}
+                        placeholder="코멘트 입력"
+                        className="w-full text-xs border border-gray-200 rounded px-2 py-1.5"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-3">
+                    <button onClick={handleCreate} disabled={saving}
+                      className="flex items-center gap-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700 disabled:opacity-50">
+                      {saving && <Loader2 size={12} className="animate-spin" />} 저장
+                    </button>
+                    <button onClick={() => setShowForm(false)}
+                      className="px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-xs hover:bg-gray-50">
+                      취소
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 평가 이력 테이블 */}
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div className="px-5 py-4 border-b border-gray-100">
+                  <h3 className="font-semibold text-gray-700">
+                    {empEvalHistory.name} — 평가 이력
+                  </h3>
+                </div>
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      {["평가일자", "해당날짜", "카테고리", "평가유형", "코멘트", "관리"].map((h, i) => (
+                        <th
+                          key={i}
+                          className="px-4 py-3 text-left text-xs font-medium text-gray-500"
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {empEvalHistory.records.map((r) =>
+                      editingId === r.emp_eval_id ? (
+                        <tr key={r.emp_eval_id} className="bg-yellow-50">
+                          <td colSpan={6} className="px-4 py-3">
+                            <div className="grid grid-cols-5 gap-2 items-end">
+                              <div>
+                                <label className="text-xs text-gray-500 block mb-1">해당 날짜</label>
+                                <input type="date" value={editData.targetDate}
+                                  onChange={(e) => setEditData({ ...editData, targetDate: e.target.value })}
+                                  className="w-full text-xs border border-gray-200 rounded px-2 py-1.5" />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500 block mb-1">카테고리</label>
+                                <select value={editData.category}
+                                  onChange={(e) => setEditData({ ...editData, category: e.target.value })}
+                                  className="w-full text-xs border border-gray-200 rounded px-2 py-1.5">
+                                  {CATEGORY_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500 block mb-1">평가 유형</label>
+                                <select value={editData.evalType}
+                                  onChange={(e) => setEditData({ ...editData, evalType: e.target.value })}
+                                  className="w-full text-xs border border-gray-200 rounded px-2 py-1.5">
+                                  {EVAL_TYPE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500 block mb-1">코멘트</label>
+                                <input type="text" value={editData.comment}
+                                  onChange={(e) => setEditData({ ...editData, comment: e.target.value })}
+                                  className="w-full text-xs border border-gray-200 rounded px-2 py-1.5" />
+                              </div>
+                              <div className="flex gap-1">
+                                <button onClick={handleUpdate} disabled={updating}
+                                  className="p-1.5 text-green-600 hover:bg-green-50 rounded disabled:opacity-50" title="저장">
+                                  {updating ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                                </button>
+                                <button onClick={() => setEditingId(null)}
+                                  className="p-1.5 text-gray-400 hover:bg-gray-100 rounded" title="취소">
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        <tr key={r.emp_eval_id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-gray-600 text-xs">{r.evaluation_date ?? "-"}</td>
+                          <td className="px-4 py-3 text-gray-600 text-xs">{r.target_date ?? "-"}</td>
+                          <td className="px-4 py-3">
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
+                              {r.category}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className="text-xs px-2 py-0.5 rounded-full font-medium text-white"
+                              style={{ backgroundColor: EVAL_TYPE_COLORS[r.evaluation_type] ?? "#94a3b8" }}
+                            >
+                              {r.evaluation_type}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-gray-500 text-xs max-w-[200px] truncate" title={r.comment ?? ""}>
+                            {r.comment ?? "-"}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-1 justify-end">
+                              <button
+                                onClick={() => handleStartEdit(r)}
+                                className="text-gray-400 hover:text-blue-500"
+                                title="수정"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(r.emp_eval_id)}
+                                disabled={deletingId === r.emp_eval_id}
+                                className="text-gray-400 hover:text-red-500 disabled:opacity-50"
+                                title="삭제"
+                              >
+                                {deletingId === r.emp_eval_id ? (
+                                  <Loader2 size={14} className="animate-spin" />
+                                ) : (
+                                  <Trash2 size={14} />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    )}
+                    {empEvalHistory.records.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="text-center py-6 text-gray-400">
+                          해당 기간 평가 이력 없음
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+        </>
+      )}
+      {subTab === "feedback" && selectedEmployee && (
+        <AiFeedbackPanel userId={selectedEmployee.user_id} />
+      )}
+      {subTab === "feedback" && !selectedEmployee && (
         <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400">
           직원을 선택하세요.
         </div>
-      ) : loadingHistory ? (
-        <div className="flex justify-center py-8">
-          <Loader2 size={24} className="animate-spin text-gray-400" />
-        </div>
-      ) : empEvalHistory ? (
-        <div className="space-y-4">
-          {/* 프로필 요약 KPI */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-              <p className="text-xs text-gray-500 mb-1">총 지적 횟수</p>
-              <p className="text-2xl font-bold text-gray-800">{empEvalHistory.records.length}건</p>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-              <p className="text-xs text-gray-500 mb-1">주요 지적 유형</p>
-              <p className="text-lg font-bold text-gray-800">
-                {(() => {
-                  const counts: Record<string, number> = {};
-                  empEvalHistory.records.forEach((r) => {
-                    counts[r.evaluation_type] = (counts[r.evaluation_type] ?? 0) + 1;
-                  });
-                  const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-                  return top ? top[0] : "-";
-                })()}
-              </p>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-              <p className="text-xs text-gray-500 mb-1">취약 카테고리</p>
-              <p className="text-lg font-bold text-gray-800">
-                {(() => {
-                  const counts: Record<string, number> = {};
-                  empEvalHistory.records.forEach((r) => {
-                    counts[r.category] = (counts[r.category] ?? 0) + 1;
-                  });
-                  const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-                  return top ? top[0] : "-";
-                })()}
-              </p>
-            </div>
-          </div>
-
-          {/* 월별 지적 건수 추이 미니차트 */}
-          {monthlyTrend.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h3 className="font-semibold text-gray-700 mb-3">월별 지적 건수 추이</h3>
-              <ResponsiveContainer width="100%" height={160}>
-                <BarChart data={monthlyTrend}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="count" name="건수" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-
-          {/* 평가 추가 폼 */}
-          {!showForm ? (
-            <button
-              onClick={() => { setShowForm(true); setTargetDate(today); }}
-              className="flex items-center gap-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700"
-            >
-              <Plus size={14} /> 평가 추가
-            </button>
-          ) : (
-            <div className="bg-white rounded-xl border border-blue-200 p-4">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                {empEvalHistory.name} — 평가 추가
-              </h3>
-              <div className="grid grid-cols-4 gap-3">
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">해당 날짜</label>
-                  <input
-                    type="date"
-                    value={targetDate}
-                    onChange={(e) => setTargetDate(e.target.value)}
-                    className="w-full text-xs border border-gray-200 rounded px-2 py-1.5"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">카테고리</label>
-                  <select value={category} onChange={(e) => setCategory(e.target.value)}
-                    className="w-full text-xs border border-gray-200 rounded px-2 py-1.5">
-                    {CATEGORY_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">평가 유형</label>
-                  <select value={evalType} onChange={(e) => setEvalType(e.target.value)}
-                    className="w-full text-xs border border-gray-200 rounded px-2 py-1.5">
-                    {EVAL_TYPE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">코멘트 (선택)</label>
-                  <input
-                    type="text"
-                    value={comment}
-                    onChange={(e) => setComment(e.target.value)}
-                    placeholder="코멘트 입력"
-                    className="w-full text-xs border border-gray-200 rounded px-2 py-1.5"
-                  />
-                </div>
-              </div>
-              <div className="flex gap-2 mt-3">
-                <button onClick={handleCreate} disabled={saving}
-                  className="flex items-center gap-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700 disabled:opacity-50">
-                  {saving && <Loader2 size={12} className="animate-spin" />} 저장
-                </button>
-                <button onClick={() => setShowForm(false)}
-                  className="px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-xs hover:bg-gray-50">
-                  취소
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* 평가 이력 테이블 */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100">
-              <h3 className="font-semibold text-gray-700">
-                {empEvalHistory.name} — 평가 이력
-              </h3>
-            </div>
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  {["평가일자", "해당날짜", "카테고리", "평가유형", "코멘트", "관리"].map((h, i) => (
-                    <th
-                      key={i}
-                      className="px-4 py-3 text-left text-xs font-medium text-gray-500"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {empEvalHistory.records.map((r) =>
-                  editingId === r.emp_eval_id ? (
-                    <tr key={r.emp_eval_id} className="bg-yellow-50">
-                      <td colSpan={6} className="px-4 py-3">
-                        <div className="grid grid-cols-5 gap-2 items-end">
-                          <div>
-                            <label className="text-xs text-gray-500 block mb-1">해당 날짜</label>
-                            <input type="date" value={editData.targetDate}
-                              onChange={(e) => setEditData({ ...editData, targetDate: e.target.value })}
-                              className="w-full text-xs border border-gray-200 rounded px-2 py-1.5" />
-                          </div>
-                          <div>
-                            <label className="text-xs text-gray-500 block mb-1">카테고리</label>
-                            <select value={editData.category}
-                              onChange={(e) => setEditData({ ...editData, category: e.target.value })}
-                              className="w-full text-xs border border-gray-200 rounded px-2 py-1.5">
-                              {CATEGORY_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="text-xs text-gray-500 block mb-1">평가 유형</label>
-                            <select value={editData.evalType}
-                              onChange={(e) => setEditData({ ...editData, evalType: e.target.value })}
-                              className="w-full text-xs border border-gray-200 rounded px-2 py-1.5">
-                              {EVAL_TYPE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="text-xs text-gray-500 block mb-1">코멘트</label>
-                            <input type="text" value={editData.comment}
-                              onChange={(e) => setEditData({ ...editData, comment: e.target.value })}
-                              className="w-full text-xs border border-gray-200 rounded px-2 py-1.5" />
-                          </div>
-                          <div className="flex gap-1">
-                            <button onClick={handleUpdate} disabled={updating}
-                              className="p-1.5 text-green-600 hover:bg-green-50 rounded disabled:opacity-50" title="저장">
-                              {updating ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                            </button>
-                            <button onClick={() => setEditingId(null)}
-                              className="p-1.5 text-gray-400 hover:bg-gray-100 rounded" title="취소">
-                              <X size={14} />
-                            </button>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    <tr key={r.emp_eval_id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-gray-600 text-xs">{r.evaluation_date ?? "-"}</td>
-                      <td className="px-4 py-3 text-gray-600 text-xs">{r.target_date ?? "-"}</td>
-                      <td className="px-4 py-3">
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
-                          {r.category}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className="text-xs px-2 py-0.5 rounded-full font-medium text-white"
-                          style={{ backgroundColor: EVAL_TYPE_COLORS[r.evaluation_type] ?? "#94a3b8" }}
-                        >
-                          {r.evaluation_type}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-500 text-xs max-w-[200px] truncate" title={r.comment ?? ""}>
-                        {r.comment ?? "-"}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1 justify-end">
-                          <button
-                            onClick={() => handleStartEdit(r)}
-                            className="text-gray-400 hover:text-blue-500"
-                            title="수정"
-                          >
-                            <Pencil size={14} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(r.emp_eval_id)}
-                            disabled={deletingId === r.emp_eval_id}
-                            className="text-gray-400 hover:text-red-500 disabled:opacity-50"
-                            title="삭제"
-                          >
-                            {deletingId === r.emp_eval_id ? (
-                              <Loader2 size={14} className="animate-spin" />
-                            ) : (
-                              <Trash2 size={14} />
-                            )}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                )}
-                {empEvalHistory.records.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="text-center py-6 text-gray-400">
-                      해당 기간 평가 이력 없음
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ) : null}
+      )}
     </div>
   );
 }
