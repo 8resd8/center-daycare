@@ -28,3 +28,16 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   INDEX idx_audit_user (user_id),
   INDEX idx_audit_resource (resource, res_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 직원 피드백 리포트 (AI 생성, 월별 upsert)
+CREATE TABLE IF NOT EXISTS employee_feedback_reports (
+  report_id    BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id      INT NOT NULL,
+  target_month VARCHAR(7) NOT NULL,
+  admin_note   TEXT,
+  ai_result    JSON NOT NULL,
+  created_at   DATETIME DEFAULT NOW(),
+  updated_at   DATETIME DEFAULT NOW() ON UPDATE NOW(),
+  UNIQUE KEY uq_user_month (user_id, target_month),
+  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
