@@ -621,7 +621,7 @@ function AiFeedbackPanel({ userId }: { userId: number }) {
             )}
 
           {/* ── 작성 방식 개선 예시 ── */}
-          {currentReport.ai_result.improvement_examples.length > 0 && (
+          {(currentReport.ai_result.improvement_examples?.length ?? 0) > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="px-5 py-4 border-b border-gray-100">
                 <h3 className="font-semibold text-gray-700">작성 방식 개선 예시</h3>
