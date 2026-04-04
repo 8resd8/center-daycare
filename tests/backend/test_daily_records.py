@@ -11,6 +11,7 @@ from .conftest import make_mock_daily_info_repo, SAMPLE_DAILY_RECORD
 def mock_repo(app):
     repo = make_mock_daily_info_repo()
     from backend.dependencies import get_daily_info_repo
+
     app.dependency_overrides[get_daily_info_repo] = lambda: repo
     yield repo
     app.dependency_overrides.pop(get_daily_info_repo, None)
@@ -32,7 +33,9 @@ class TestListDailyRecords:
 
     def test_날짜_범위_필터(self, client, mock_repo):
         mock_repo.get_customer_records.return_value = []
-        client.get("/api/daily-records?customer_id=1&start_date=2024-01-01&end_date=2024-01-31")
+        client.get(
+            "/api/daily-records?customer_id=1&start_date=2024-01-01&end_date=2024-01-31"
+        )
         mock_repo.get_customer_records.assert_called_once_with(
             customer_id=1,
             start_date=date(2024, 1, 1),
@@ -69,7 +72,9 @@ class TestGetCustomersWithRecords:
 
     def test_날짜_필터_전달(self, client, mock_repo):
         mock_repo.get_customers_with_records.return_value = []
-        client.get("/api/daily-records/customers-with-records?start_date=2024-01-01&end_date=2024-01-31")
+        client.get(
+            "/api/daily-records/customers-with-records?start_date=2024-01-01&end_date=2024-01-31"
+        )
         mock_repo.get_customers_with_records.assert_called_once_with(
             start_date=date(2024, 1, 1),
             end_date=date(2024, 1, 31),
@@ -88,7 +93,12 @@ class TestGetDailyRecord:
         return patch("modules.db_connection.db_query", _mock_db_query)
 
     def test_기록_조회(self, client, mock_repo):
-        record = {**SAMPLE_DAILY_RECORD, "record_id": 100, "customer_id": 1, "date": date(2024, 1, 15)}
+        record = {
+            **SAMPLE_DAILY_RECORD,
+            "record_id": 100,
+            "customer_id": 1,
+            "date": date(2024, 1, 15),
+        }
         with self._make_mock_db(record):
             resp = client.get("/api/daily-records/100")
         assert resp.status_code == 200
@@ -117,6 +127,7 @@ class TestDailyRecordsMasking:
     def mock_repo_for_viewer(self, app):
         repo = make_mock_daily_info_repo()
         from backend.dependencies import get_daily_info_repo
+
         app.dependency_overrides[get_daily_info_repo] = lambda: repo
         yield repo
         app.dependency_overrides.pop(get_daily_info_repo, None)
@@ -139,3 +150,20 @@ class TestDailyRecordsMasking:
         data = resp.json()
         assert data[0]["name"] == "홍**"
         assert data[0]["grade"] == "**"
+
+
+# ── 입력 유효성 검사 ─────────────────────────────────────────────────
+
+
+class TestDailyRecordsValidation:
+    """일일 기록 조회 쿼리 파라미터 유효성 검사 — 422 반환 케이스."""
+
+    def test_잘못된_start_date_422(self, client, mock_repo):
+        """start_date에 날짜 형식이 아닌 값 → 422."""
+        resp = client.get("/api/daily-records?customer_id=1&start_date=not-a-date")
+        assert resp.status_code == 422
+
+    def test_잘못된_end_date_422(self, client, mock_repo):
+        """end_date에 날짜 형식이 아닌 값 → 422."""
+        resp = client.get("/api/daily-records?customer_id=1&end_date=not-a-date")
+        assert resp.status_code == 422
