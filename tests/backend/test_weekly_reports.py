@@ -2,14 +2,15 @@
 
 import pytest
 from datetime import date
-from unittest.mock import MagicMock, patch, call
-from .conftest import make_mock_weekly_status_repo, make_mock_customer_repo, SAMPLE_CUSTOMER
+from unittest.mock import MagicMock, patch
+from .conftest import make_mock_weekly_status_repo, SAMPLE_CUSTOMER
 
 
 @pytest.fixture
 def mock_weekly_repo(app):
     repo = make_mock_weekly_status_repo()
     from backend.dependencies import get_weekly_status_repo
+
     app.dependency_overrides[get_weekly_status_repo] = lambda: repo
     yield repo
     app.dependency_overrides.pop(get_weekly_status_repo, None)
@@ -20,6 +21,7 @@ def mock_report_service(app):
     svc = MagicMock()
     svc.generate_weekly_report.return_value = "주간 보고서 텍스트"
     from backend.dependencies import get_report_service
+
     app.dependency_overrides[get_report_service] = lambda: svc
     yield svc
     app.dependency_overrides.pop(get_report_service, None)
@@ -82,7 +84,9 @@ class TestGenerateWeeklyReport:
 
         with (
             patch("modules.repositories.customer.CustomerRepository") as MockCR,
-            patch("backend.routers.weekly_reports.compute_weekly_status") as mock_compute,
+            patch(
+                "backend.routers.weekly_reports.compute_weekly_status"
+            ) as mock_compute,
         ):
             MockCR.return_value.get_customer.return_value = SAMPLE_CUSTOMER
             mock_compute.return_value = {"data": "주간 데이터"}
@@ -105,7 +109,9 @@ class TestGenerateWeeklyReport:
 
         with (
             patch("modules.repositories.customer.CustomerRepository") as MockCR,
-            patch("backend.routers.weekly_reports.compute_weekly_status") as mock_compute,
+            patch(
+                "backend.routers.weekly_reports.compute_weekly_status"
+            ) as mock_compute,
         ):
             MockCR.return_value.get_customer.return_value = SAMPLE_CUSTOMER
             mock_compute.return_value = {}
@@ -115,11 +121,15 @@ class TestGenerateWeeklyReport:
 
         assert resp.status_code == 500
 
-    def test_응답에_weekly_table_포함(self, client, mock_weekly_repo, mock_report_service):
+    def test_응답에_weekly_table_포함(
+        self, client, mock_weekly_repo, mock_report_service
+    ):
         """generate 응답에 weekly_table이 포함되어야 한다."""
         with (
             patch("modules.repositories.customer.CustomerRepository") as MockCR,
-            patch("backend.routers.weekly_reports.compute_weekly_status") as mock_compute,
+            patch(
+                "backend.routers.weekly_reports.compute_weekly_status"
+            ) as mock_compute,
         ):
             MockCR.return_value.get_customer.return_value = SAMPLE_CUSTOMER
             mock_compute.return_value = {
@@ -141,11 +151,15 @@ class TestGenerateWeeklyReport:
         """generate 응답에 scores가 포함되어야 한다."""
         with (
             patch("modules.repositories.customer.CustomerRepository") as MockCR,
-            patch("backend.routers.weekly_reports.compute_weekly_status") as mock_compute,
+            patch(
+                "backend.routers.weekly_reports.compute_weekly_status"
+            ) as mock_compute,
         ):
             MockCR.return_value.get_customer.return_value = SAMPLE_CUSTOMER
             mock_compute.return_value = {
-                "scores": {"physical": {"label": "신체활동", "prev": 55.0, "curr": 60.0}},
+                "scores": {
+                    "physical": {"label": "신체활동", "prev": 55.0, "curr": 60.0}
+                },
                 "trend": {"weekly_table": [], "ai_payload": {}},
             }
             mock_weekly_repo.load_weekly_status.return_value = None
@@ -156,12 +170,16 @@ class TestGenerateWeeklyReport:
         assert "scores" in data
         assert "physical" in data["scores"]
 
-    def test_ai_payload_경로_올바름(self, client, mock_weekly_repo, mock_report_service):
+    def test_ai_payload_경로_올바름(
+        self, client, mock_weekly_repo, mock_report_service
+    ):
         """회귀 테스트: trend.ai_payload가 서비스에 전달되어야 함 (전체 analysis_result 아님)."""
         expected_payload = {"current_week": {"physical": "테스트 신체"}}
         with (
             patch("modules.repositories.customer.CustomerRepository") as MockCR,
-            patch("backend.routers.weekly_reports.compute_weekly_status") as mock_compute,
+            patch(
+                "backend.routers.weekly_reports.compute_weekly_status"
+            ) as mock_compute,
         ):
             MockCR.return_value.get_customer.return_value = SAMPLE_CUSTOMER
             mock_compute.return_value = {
@@ -178,13 +196,19 @@ class TestGenerateWeeklyReport:
         call_kwargs = mock_report_service.generate_weekly_report.call_args
         # analysis_payload 인자로 전달된 값 확인 (analysis_result 전체가 아닌 ai_payload여야 함)
         passed = call_kwargs.kwargs.get("analysis_payload") or call_kwargs.args[2]
-        assert "current_week" in passed, "ai_payload.current_week이 서비스에 전달되지 않음"
+        assert "current_week" in passed, (
+            "ai_payload.current_week이 서비스에 전달되지 않음"
+        )
 
-    def test_trend_없을때_빈_weekly_table(self, client, mock_weekly_repo, mock_report_service):
+    def test_trend_없을때_빈_weekly_table(
+        self, client, mock_weekly_repo, mock_report_service
+    ):
         """analysis_result에 trend 없으면 weekly_table=[] (KeyError 아님)."""
         with (
             patch("modules.repositories.customer.CustomerRepository") as MockCR,
-            patch("backend.routers.weekly_reports.compute_weekly_status") as mock_compute,
+            patch(
+                "backend.routers.weekly_reports.compute_weekly_status"
+            ) as mock_compute,
         ):
             MockCR.return_value.get_customer.return_value = SAMPLE_CUSTOMER
             mock_compute.return_value = {"scores": {}}  # trend 키 없음
@@ -222,7 +246,9 @@ class TestGetWeeklyAnalysis:
         """정상 응답에 필수 필드가 모두 포함되어야 한다."""
         with (
             patch("modules.repositories.customer.CustomerRepository") as MockCR,
-            patch("backend.routers.weekly_reports.compute_weekly_status") as mock_compute,
+            patch(
+                "backend.routers.weekly_reports.compute_weekly_status"
+            ) as mock_compute,
         ):
             MockCR.return_value.get_customer.return_value = SAMPLE_CUSTOMER
             mock_compute.return_value = {
@@ -230,7 +256,9 @@ class TestGetWeeklyAnalysis:
                     (date(2024, 1, 1), date(2024, 1, 7)),
                     (date(2024, 1, 8), date(2024, 1, 14)),
                 ),
-                "scores": {"physical": {"label": "신체활동", "prev": 55.0, "curr": 60.0}},
+                "scores": {
+                    "physical": {"label": "신체활동", "prev": 55.0, "curr": 60.0}
+                },
                 "trend": {
                     "weekly_table": [{"주간": "지난주"}, {"주간": "이번주"}],
                     "prev_prog_entries": [],
@@ -243,14 +271,23 @@ class TestGetWeeklyAnalysis:
 
         assert resp.status_code == 200
         data = resp.json()
-        for key in ["weekly_table", "scores", "prev_range", "curr_range", "prev_prog_entries", "curr_prog_entries"]:
+        for key in [
+            "weekly_table",
+            "scores",
+            "prev_range",
+            "curr_range",
+            "prev_prog_entries",
+            "curr_prog_entries",
+        ]:
             assert key in data, f"'{key}' 필드가 응답에 없음"
 
     def test_범위_날짜_형식_문자열(self, client):
         """prev_range, curr_range가 ['YYYY-MM-DD', 'YYYY-MM-DD'] 형식이어야 한다."""
         with (
             patch("modules.repositories.customer.CustomerRepository") as MockCR,
-            patch("backend.routers.weekly_reports.compute_weekly_status") as mock_compute,
+            patch(
+                "backend.routers.weekly_reports.compute_weekly_status"
+            ) as mock_compute,
         ):
             MockCR.return_value.get_customer.return_value = SAMPLE_CUSTOMER
             mock_compute.return_value = {
@@ -259,7 +296,11 @@ class TestGetWeeklyAnalysis:
                     (date(2024, 1, 8), date(2024, 1, 14)),
                 ),
                 "scores": {},
-                "trend": {"weekly_table": [], "prev_prog_entries": [], "curr_prog_entries": []},
+                "trend": {
+                    "weekly_table": [],
+                    "prev_prog_entries": [],
+                    "curr_prog_entries": [],
+                },
             }
             resp = client.get(
                 f"{self.BASE}?customer_id=1&start_date=2024-01-08&end_date=2024-01-14"
@@ -274,7 +315,9 @@ class TestGetWeeklyAnalysis:
         """데이터 없어도 KeyError/500이 아닌 빈 배열 반환."""
         with (
             patch("modules.repositories.customer.CustomerRepository") as MockCR,
-            patch("backend.routers.weekly_reports.compute_weekly_status") as mock_compute,
+            patch(
+                "backend.routers.weekly_reports.compute_weekly_status"
+            ) as mock_compute,
         ):
             MockCR.return_value.get_customer.return_value = SAMPLE_CUSTOMER
             mock_compute.return_value = {
@@ -299,7 +342,9 @@ class TestGetWeeklyAnalysis:
         """analysis_result에 trend 키 없을 때 빈 배열 (500 아님)."""
         with (
             patch("modules.repositories.customer.CustomerRepository") as MockCR,
-            patch("backend.routers.weekly_reports.compute_weekly_status") as mock_compute,
+            patch(
+                "backend.routers.weekly_reports.compute_weekly_status"
+            ) as mock_compute,
         ):
             MockCR.return_value.get_customer.return_value = SAMPLE_CUSTOMER
             mock_compute.return_value = {"scores": {}, "ranges": None}
@@ -317,7 +362,9 @@ class TestGetWeeklyAnalysis:
         """ranges가 None이면 prev_range, curr_range가 null (unpack 예외 아님)."""
         with (
             patch("modules.repositories.customer.CustomerRepository") as MockCR,
-            patch("backend.routers.weekly_reports.compute_weekly_status") as mock_compute,
+            patch(
+                "backend.routers.weekly_reports.compute_weekly_status"
+            ) as mock_compute,
         ):
             MockCR.return_value.get_customer.return_value = SAMPLE_CUSTOMER
             mock_compute.return_value = {"scores": {}, "ranges": None}
@@ -334,7 +381,9 @@ class TestGetWeeklyAnalysis:
         """curr_prog_entries에 이번주 활동 데이터가 올바르게 포함되어야 한다."""
         with (
             patch("modules.repositories.customer.CustomerRepository") as MockCR,
-            patch("backend.routers.weekly_reports.compute_weekly_status") as mock_compute,
+            patch(
+                "backend.routers.weekly_reports.compute_weekly_status"
+            ) as mock_compute,
         ):
             MockCR.return_value.get_customer.return_value = SAMPLE_CUSTOMER
             mock_compute.return_value = {
@@ -362,7 +411,9 @@ class TestGetWeeklyAnalysis:
         """prev_prog_entries와 curr_prog_entries가 주차별로 각각 분리되어야 한다."""
         with (
             patch("modules.repositories.customer.CustomerRepository") as MockCR,
-            patch("backend.routers.weekly_reports.compute_weekly_status") as mock_compute,
+            patch(
+                "backend.routers.weekly_reports.compute_weekly_status"
+            ) as mock_compute,
         ):
             MockCR.return_value.get_customer.return_value = SAMPLE_CUSTOMER
             mock_compute.return_value = {
@@ -401,3 +452,48 @@ class TestSaveWeeklyReport:
         assert resp.status_code == 200
         assert resp.json()["message"] == "저장 완료"
         mock_weekly_repo.save_weekly_status.assert_called_once()
+
+
+# ── 입력 유효성 검사 ─────────────────────────────────────────────────
+
+
+class TestWeeklyReportValidation:
+    """주간 보고서 생성 요청 유효성 검사 — 422 반환 케이스."""
+
+    def test_generate_customer_id_필수_422(
+        self, client, mock_weekly_repo, mock_report_service
+    ):
+        """customer_id 없이 POST → 422."""
+        resp = client.post(
+            "/api/weekly-reports/generate",
+            json={"start_date": "2024-01-08", "end_date": "2024-01-14"},
+        )
+        assert resp.status_code == 422
+
+    def test_generate_잘못된_start_date_422(
+        self, client, mock_weekly_repo, mock_report_service
+    ):
+        """start_date에 날짜 형식이 아닌 값 → 422."""
+        resp = client.post(
+            "/api/weekly-reports/generate",
+            json={
+                "customer_id": 1,
+                "start_date": "not-a-date",
+                "end_date": "2024-01-14",
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_generate_잘못된_end_date_422(
+        self, client, mock_weekly_repo, mock_report_service
+    ):
+        """end_date에 날짜 형식이 아닌 값 → 422."""
+        resp = client.post(
+            "/api/weekly-reports/generate",
+            json={
+                "customer_id": 1,
+                "start_date": "2024-01-08",
+                "end_date": "not-a-date",
+            },
+        )
+        assert resp.status_code == 422
