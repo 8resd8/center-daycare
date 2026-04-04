@@ -196,38 +196,42 @@ class TestDeleteEmployeeEvaluation:
 
 # ── 입력 유효성 검사 ─────────────────────────────────────────────────
 
-_VALID_PAYLOAD = {
-    "target_user_id": 1,
-    "category": "신체",
-    "evaluation_type": "누락",
-    "evaluation_date": "2024-01-15",
-}
-
 
 class TestEmployeeEvaluationValidation:
     """직원 평가 생성 요청 유효성 검사 — 422 반환 케이스."""
 
+    VALID_PAYLOAD = {
+        "target_user_id": 1,
+        "category": "신체",
+        "evaluation_type": "누락",
+        "evaluation_date": "2024-01-15",
+    }
+
     def test_target_user_id_필수_422(self, client, mock_repo):
         """target_user_id 없이 POST → 422."""
-        payload = {k: v for k, v in _VALID_PAYLOAD.items() if k != "target_user_id"}
+        payload = {k: v for k, v in self.VALID_PAYLOAD.items() if k != "target_user_id"}
         resp = client.post("/api/employee-evaluations", json=payload)
         assert resp.status_code == 422
 
     def test_category_필수_422(self, client, mock_repo):
         """category 없이 POST → 422."""
-        payload = {k: v for k, v in _VALID_PAYLOAD.items() if k != "category"}
+        payload = {k: v for k, v in self.VALID_PAYLOAD.items() if k != "category"}
         resp = client.post("/api/employee-evaluations", json=payload)
         assert resp.status_code == 422
 
     def test_evaluation_type_필수_422(self, client, mock_repo):
         """evaluation_type 없이 POST → 422."""
-        payload = {k: v for k, v in _VALID_PAYLOAD.items() if k != "evaluation_type"}
+        payload = {
+            k: v for k, v in self.VALID_PAYLOAD.items() if k != "evaluation_type"
+        }
         resp = client.post("/api/employee-evaluations", json=payload)
         assert resp.status_code == 422
 
     def test_evaluation_date_필수_422(self, client, mock_repo):
         """evaluation_date 없이 POST → 422."""
-        payload = {k: v for k, v in _VALID_PAYLOAD.items() if k != "evaluation_date"}
+        payload = {
+            k: v for k, v in self.VALID_PAYLOAD.items() if k != "evaluation_date"
+        }
         resp = client.post("/api/employee-evaluations", json=payload)
         assert resp.status_code == 422
 
@@ -235,6 +239,6 @@ class TestEmployeeEvaluationValidation:
         """evaluation_date에 날짜 형식이 아닌 값 → 422."""
         resp = client.post(
             "/api/employee-evaluations",
-            json={**_VALID_PAYLOAD, "evaluation_date": "not-a-date"},
+            json={**self.VALID_PAYLOAD, "evaluation_date": "not-a-date"},
         )
         assert resp.status_code == 422

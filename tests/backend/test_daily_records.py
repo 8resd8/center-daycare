@@ -158,12 +158,12 @@ class TestDailyRecordsMasking:
 class TestDailyRecordsValidation:
     """일일 기록 조회 쿼리 파라미터 유효성 검사 — 422 반환 케이스."""
 
-    def test_잘못된_start_date_422(self, client, mock_repo):
+    def test_잘못된_start_date_422(self, client):
         """start_date에 날짜 형식이 아닌 값 → 422."""
         resp = client.get("/api/daily-records?customer_id=1&start_date=not-a-date")
         assert resp.status_code == 422
 
-    def test_잘못된_end_date_422(self, client, mock_repo):
+    def test_잘못된_end_date_422(self, client):
         """end_date에 날짜 형식이 아닌 값 → 422."""
         resp = client.get("/api/daily-records?customer_id=1&end_date=not-a-date")
         assert resp.status_code == 422

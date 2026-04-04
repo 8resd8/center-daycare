@@ -460,9 +460,7 @@ class TestSaveWeeklyReport:
 class TestWeeklyReportValidation:
     """주간 보고서 생성 요청 유효성 검사 — 422 반환 케이스."""
 
-    def test_generate_customer_id_필수_422(
-        self, client, mock_weekly_repo, mock_report_service
-    ):
+    def test_generate_customer_id_필수_422(self, client):
         """customer_id 없이 POST → 422."""
         resp = client.post(
             "/api/weekly-reports/generate",
@@ -470,9 +468,7 @@ class TestWeeklyReportValidation:
         )
         assert resp.status_code == 422
 
-    def test_generate_잘못된_start_date_422(
-        self, client, mock_weekly_repo, mock_report_service
-    ):
+    def test_generate_잘못된_start_date_422(self, client):
         """start_date에 날짜 형식이 아닌 값 → 422."""
         resp = client.post(
             "/api/weekly-reports/generate",
@@ -484,9 +480,7 @@ class TestWeeklyReportValidation:
         )
         assert resp.status_code == 422
 
-    def test_generate_잘못된_end_date_422(
-        self, client, mock_weekly_repo, mock_report_service
-    ):
+    def test_generate_잘못된_end_date_422(self, client):
         """end_date에 날짜 형식이 아닌 값 → 422."""
         resp = client.post(
             "/api/weekly-reports/generate",
