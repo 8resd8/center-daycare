@@ -7,7 +7,6 @@
 """
 
 import pytest
-from unittest.mock import MagicMock, patch
 from .conftest import make_mock_employee_repo, SAMPLE_EMPLOYEE
 
 
@@ -15,6 +14,7 @@ from .conftest import make_mock_employee_repo, SAMPLE_EMPLOYEE
 def mock_repo(app):
     repo = make_mock_employee_repo()
     from backend.dependencies import get_user_repo
+
     app.dependency_overrides[get_user_repo] = lambda: repo
     yield repo
     app.dependency_overrides.pop(get_user_repo, None)
@@ -131,6 +131,7 @@ class TestEmployeeMasking:
     def mock_repo_for_viewer(self, app):
         repo = make_mock_employee_repo()
         from backend.dependencies import get_user_repo
+
         app.dependency_overrides[get_user_repo] = lambda: repo
         yield repo
         app.dependency_overrides.pop(get_user_repo, None)
@@ -150,3 +151,47 @@ class TestEmployeeMasking:
         data = resp.json()
         assert data["name"] == "김**"
         assert data["job_type"] == "***"
+
+
+# ── 입력 유효성 검사 ─────────────────────────────────────────────────
+
+
+class TestEmployeeValidation:
+    """직원 생성 요청 유효성 검사 — 422 반환 케이스."""
+
+    def test_name_필수_422(self, client, mock_repo):
+        """name 없이 POST → 422."""
+        resp = client.post(
+            "/api/employees",
+            json={"username": "user01", "password": "pass1234"},
+        )
+        assert resp.status_code == 422
+
+    def test_username_필수_422(self, client, mock_repo):
+        """username 없이 POST → 422."""
+        resp = client.post(
+            "/api/employees",
+            json={"name": "김요양", "password": "pass1234"},
+        )
+        assert resp.status_code == 422
+
+    def test_password_필수_422(self, client, mock_repo):
+        """password 없이 POST → 422."""
+        resp = client.post(
+            "/api/employees",
+            json={"name": "김요양", "username": "user01"},
+        )
+        assert resp.status_code == 422
+
+    def test_잘못된_resignation_date_422(self, client, mock_repo):
+        """resignation_date에 날짜 형식이 아닌 값 → 422."""
+        resp = client.post(
+            "/api/employees",
+            json={
+                "name": "김요양",
+                "username": "user01",
+                "password": "pass1234",
+                "resignation_date": "not-a-date",
+            },
+        )
+        assert resp.status_code == 422
