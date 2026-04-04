@@ -1,7 +1,7 @@
 """인증 엔드포인트 테스트."""
 
 import hashlib
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -17,6 +17,7 @@ from backend.dependencies import get_user_repo
 def reset_rate_limiter():
     """각 테스트 전후 Rate Limiter 스토리지 초기화."""
     import backend.routers.auth as auth_module
+
     try:
         auth_module.limiter._storage.reset()
     except Exception:
@@ -26,6 +27,7 @@ def reset_rate_limiter():
         auth_module.limiter._storage.reset()
     except Exception:
         pass
+
 
 _PWD_CONTEXT = CryptContext(schemes=["bcrypt"], deprecated="auto")
 _TEST_SECRET = "test-secret-key-for-unit-tests-only"
@@ -37,6 +39,7 @@ def patch_jwt_secret():
     """테스트 전용 JWT secret으로 auth 모듈을 패치 (load_dotenv 영향 차단)."""
     import backend.routers.auth as auth_module
     import backend.dependencies as deps_module
+
     original_auth = auth_module.SECRET_KEY
     original_deps = deps_module._SECRET_KEY
     auth_module.SECRET_KEY = _TEST_SECRET
@@ -176,6 +179,7 @@ class TestLogin:
 
 # ── SHA256 → bcrypt 자동 마이그레이션 ──────────────────────────────
 
+
 class TestPasswordMigration:
     def test_sha256_password_migrated_to_bcrypt(self):
         user = _make_user(raw_password="password123", use_bcrypt=False)
@@ -214,6 +218,7 @@ class TestPasswordMigration:
 
 # ── /me 엔드포인트 ────────────────────────────────────────────────
 
+
 class TestMe:
     def _valid_token(self) -> str:
         payload = {
@@ -240,7 +245,9 @@ class TestMe:
 
     def test_me_with_invalid_token_returns_401(self):
         with TestClient(app, raise_server_exceptions=False) as client:
-            res = client.get("/api/auth/me", cookies={"access_token": "invalid.token.here"})
+            res = client.get(
+                "/api/auth/me", cookies={"access_token": "invalid.token.here"}
+            )
         assert res.status_code == 401
 
     def test_me_with_expired_token_returns_401(self):
@@ -260,6 +267,7 @@ class TestMe:
 
 # ── 로그아웃 ─────────────────────────────────────────────────────
 
+
 class TestLogout:
     def test_logout_returns_message(self):
         with TestClient(app, raise_server_exceptions=False) as client:
@@ -276,6 +284,7 @@ class TestLogout:
 
 
 # ── 보호된 엔드포인트 인증 필요 확인 ──────────────────────────────
+
 
 class TestProtectedEndpoints:
     def test_customers_without_auth_returns_401(self):
@@ -328,7 +337,12 @@ class TestRefresh:
             if expired
             else datetime.now(timezone.utc) + timedelta(days=7)
         )
-        payload = {"sub": str(user_id), "user_id": user_id, "type": token_type, "exp": exp}
+        payload = {
+            "sub": str(user_id),
+            "user_id": user_id,
+            "type": token_type,
+            "exp": exp,
+        }
         return jwt.encode(payload, _TEST_SECRET, algorithm=_ALGORITHM)
 
     def _make_full_user(self, user_id=1):
@@ -370,7 +384,9 @@ class TestRefresh:
 
     def test_잘못된_형식_401(self):
         with TestClient(app, raise_server_exceptions=False) as client:
-            res = client.post("/api/auth/refresh", cookies={"refresh_token": "invalid.jwt.token"})
+            res = client.post(
+                "/api/auth/refresh", cookies={"refresh_token": "invalid.jwt.token"}
+            )
         assert res.status_code == 401
 
     def test_access_token을_refresh로_사용하면_401(self):
@@ -456,3 +472,45 @@ class TestJwtEdgeCases:
                 cookies={"access_token": token},
             )
         assert res.status_code == 403
+
+
+# ── Rate Limit ────────────────────────────────────────────────────────
+
+
+class TestRateLimit:
+    """POST /api/auth/login slowapi 5회/분 제한 검증."""
+
+    def test_rate_limit_5회_이내_정상(self):
+        """5회 이내 요청은 200/401 (429 아님)."""
+        mock_r = _mock_repo(None)  # 존재하지 않는 유저 → 빠른 401
+        app.dependency_overrides[get_user_repo] = lambda: mock_r
+        try:
+            with TestClient(app, raise_server_exceptions=False) as client:
+                for i in range(5):
+                    res = client.post(
+                        "/api/auth/login",
+                        json={"username": "nobody", "password": "pw"},
+                    )
+                    assert res.status_code != 429, f"{i + 1}번째 요청에서 429 발생"
+        finally:
+            app.dependency_overrides.pop(get_user_repo, None)
+
+    def test_rate_limit_6회_초과_429(self):
+        """6번째 요청에서 429 반환."""
+        mock_r = _mock_repo(None)
+        app.dependency_overrides[get_user_repo] = lambda: mock_r
+        try:
+            with TestClient(app, raise_server_exceptions=False) as client:
+                for _ in range(5):
+                    client.post(
+                        "/api/auth/login",
+                        json={"username": "nobody", "password": "pw"},
+                    )
+                res = client.post(
+                    "/api/auth/login",
+                    json={"username": "nobody", "password": "pw"},
+                )
+        finally:
+            app.dependency_overrides.pop(get_user_repo, None)
+
+        assert res.status_code == 429
