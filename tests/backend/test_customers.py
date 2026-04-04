@@ -15,6 +15,7 @@ from .conftest import make_mock_customer_repo, SAMPLE_CUSTOMER
 def mock_repo(app):
     repo = make_mock_customer_repo()
     from backend.dependencies import get_customer_repo
+
     app.dependency_overrides[get_customer_repo] = lambda: repo
     yield repo
     app.dependency_overrides.pop(get_customer_repo, None)
@@ -132,6 +133,7 @@ class TestCustomerMasking:
     def mock_repo_for_viewer(self, app):
         repo = make_mock_customer_repo()
         from backend.dependencies import get_customer_repo
+
         app.dependency_overrides[get_customer_repo] = lambda: repo
         yield repo
         app.dependency_overrides.pop(get_customer_repo, None)
@@ -152,3 +154,23 @@ class TestCustomerMasking:
         data = resp.json()
         assert data[0]["name"] == "홍길동"
         assert data[0]["grade"] == "3등급"
+
+
+# ── 입력 유효성 검사 ─────────────────────────────────────────────────
+
+
+class TestCustomerValidation:
+    """수급자 생성 요청 유효성 검사 — 422 반환 케이스."""
+
+    def test_name_필수_422(self, client, mock_repo):
+        """name 없이 POST → 422."""
+        resp = client.post("/api/customers", json={"gender": "남"})
+        assert resp.status_code == 422
+
+    def test_잘못된_benefit_start_date_422(self, client, mock_repo):
+        """benefit_start_date에 날짜 형식이 아닌 값 → 422."""
+        resp = client.post(
+            "/api/customers",
+            json={"name": "홍길동", "benefit_start_date": "not-a-date"},
+        )
+        assert resp.status_code == 422
