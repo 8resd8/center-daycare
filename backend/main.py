@@ -1,8 +1,12 @@
 """FastAPI 메인 앱"""
 
+import logging
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 # modules/ 경로를 Python path에 추가
 ROOT_DIR = Path(__file__).parent.parent
@@ -44,14 +48,14 @@ async def lifespan(app: FastAPI):
         from modules.db_connection import _get_connection_pool
 
         _get_connection_pool()
-        print("DB 연결 풀 초기화 완료")
+        logger.info("DB 연결 풀 초기화 완료")
     except Exception as e:
-        print(f"DB 연결 풀 초기화 실패 (첫 요청 시 재시도): {e}")
+        logger.warning("DB 연결 풀 초기화 실패 (첫 요청 시 재시도): %s", e)
 
     yield
 
     # 정리 작업
-    print("앱 종료")
+    logger.info("앱 종료")
 
 
 app = FastAPI(

@@ -1,11 +1,7 @@
 """PDF 업로드 API 테스트."""
 
 import io
-import json
-import shutil
-import tempfile
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
@@ -16,6 +12,7 @@ from .conftest import make_mock_daily_info_repo
 def mock_repo(app):
     repo = make_mock_daily_info_repo()
     from backend.dependencies import get_daily_info_repo
+
     app.dependency_overrides[get_daily_info_repo] = lambda: repo
     yield repo
     app.dependency_overrides.pop(get_daily_info_repo, None)
@@ -74,6 +71,7 @@ class TestUploadPdf:
 
     def test_업로드_후_file_id_UUID_형식(self, client, mock_repo):
         import uuid
+
         with patch("modules.pdf_parser.CareRecordParser") as MockParser:
             MockParser.return_value.parse.return_value = [{"customer_name": "test"}]
             data = io.BytesIO(b"%PDF fake")
@@ -126,7 +124,7 @@ class TestSaveParsedData:
 
         resp = client.post(f"/api/upload/{file_id}/save")
         assert resp.status_code == 500
-        assert "DB 저장 실패" in resp.json()["detail"]
+        assert "DB 저장" in resp.json()["detail"]
 
 
 class TestGetParsedPreview:

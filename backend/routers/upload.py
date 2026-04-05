@@ -3,6 +3,7 @@
 import asyncio
 import io
 import json
+import logging
 import shutil
 import tempfile
 import uuid
@@ -11,6 +12,8 @@ from pathlib import Path
 from typing import Dict, List
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+
+logger = logging.getLogger(__name__)
 
 from backend.dependencies import get_current_user, get_daily_info_repo, require_admin
 from modules.repositories.daily_info import DailyInfoRepository
@@ -27,6 +30,7 @@ CHUNK_TTL_HOURS = 2
 
 # ─── 헬퍼 ───────────────────────────────────────────────────────────────────
 
+
 def _get_session_dir(upload_id: str) -> Path:
     return CHUNK_DIR / upload_id
 
@@ -34,7 +38,9 @@ def _get_session_dir(upload_id: str) -> Path:
 def _read_meta(upload_id: str) -> dict:
     meta_path = _get_session_dir(upload_id) / "meta.json"
     if not meta_path.exists():
-        raise HTTPException(status_code=404, detail="업로드 세션을 찾을 수 없습니다. 다시 시작하세요.")
+        raise HTTPException(
+            status_code=404, detail="업로드 세션을 찾을 수 없습니다. 다시 시작하세요."
+        )
     return json.loads(meta_path.read_text(encoding="utf-8"))
 
 
@@ -67,6 +73,7 @@ def _cleanup_expired_sessions() -> None:
 
 
 # ─── 기존 단일 업로드 엔드포인트 ────────────────────────────────────────────
+
 
 @router.post("/upload")
 async def upload_pdf(
@@ -113,12 +120,15 @@ def save_parsed_data(
     """파싱된 데이터를 DB에 저장"""
     records = _parsed_cache.get(file_id)
     if not records:
-        raise HTTPException(status_code=404, detail="파싱 데이터를 찾을 수 없습니다. 다시 업로드하세요.")
+        raise HTTPException(
+            status_code=404, detail="파싱 데이터를 찾을 수 없습니다. 다시 업로드하세요."
+        )
 
     try:
         saved_count = repo.save_parsed_data(records)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"DB 저장 실패: {e}")
+        logger.error("DB 저장 실패 (file_id=%s): %s", file_id, e)
+        raise HTTPException(status_code=500, detail="DB 저장 중 오류가 발생했습니다.")
 
     del _parsed_cache[file_id]
 
@@ -135,6 +145,7 @@ def get_parsed_preview(file_id: str):
 
 
 # ─── 청크 업로드 엔드포인트 ─────────────────────────────────────────────────
+
 
 @router.post("/upload/chunk/init")
 async def init_chunked_upload(

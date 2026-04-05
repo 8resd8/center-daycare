@@ -1,7 +1,10 @@
 """공통 의존성 (Dependency Injection)"""
 
+import logging
 import os
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from fastapi import Cookie, Depends, HTTPException
 from jose import jwt, JWTError
@@ -17,8 +20,12 @@ from modules.services.daily_report_service import EvaluationService
 from modules.services.weekly_report_service import ReportService
 from modules.services.feedback_service import FeedbackService
 
-_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-me-in-production-use-random-32bytes")
+_DEFAULT_JWT_KEY = "change-me-in-production-use-random-32bytes"
+_SECRET_KEY = os.getenv("JWT_SECRET_KEY", _DEFAULT_JWT_KEY)
 _ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+
+if _SECRET_KEY == _DEFAULT_JWT_KEY:
+    logger.warning("JWT_SECRET_KEY가 기본값입니다. 운영 환경에서는 반드시 변경하세요.")
 
 
 def get_customer_repo() -> CustomerRepository:
